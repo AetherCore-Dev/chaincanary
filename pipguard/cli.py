@@ -7,6 +7,7 @@ import json
 import re
 import sys
 import subprocess
+import concurrent.futures
 from typing import Optional
 
 import click
@@ -14,6 +15,9 @@ from rich.console import Console
 from rich.live import Live
 from rich.spinner import Spinner
 from rich.text import Text
+from rich.table import Table
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+from rich import box
 
 from pipguard.engine import AnalysisEngine
 from pipguard import reporter
@@ -59,23 +63,28 @@ def _run_analysis(
     version: str,
     skip_dynamic: bool = False,
     verbose: bool = False,
+    quiet: bool = False,       # suppress spinner (e.g., JSON mode or batch)
 ):
     """Run full analysis with live progress display."""
-    reporter.print_scanning(package, version)
+    if not quiet:
+        reporter.print_scanning(package, version)
 
-    status_text = Text("Starting...", style="dim")
     engine = AnalysisEngine(skip_dynamic=skip_dynamic, verbose=verbose)
 
-    with Live(
-        Spinner("dots", text=status_text),
-        console=console,
-        transient=True,
-        refresh_per_second=10,
-    ) as live:
-        def on_progress(msg: str):
-            status_text.plain = f"  {msg}"
-
-        report = engine.analyze(package, version, on_progress=on_progress)
+    if quiet or not console.is_terminal:
+        # JSON / piped output — no spinner, no color pollution
+        report = engine.analyze(package, version)
+    else:
+        status_text = Text("Starting...", style="dim")
+        with Live(
+            Spinner("dots", text=status_text),
+            console=console,
+            transient=True,
+            refresh_per_second=10,
+        ):
+            def on_progress(msg: str):
+                status_text.plain = f"  {msg}"
+            report = engine.analyze(package, version, on_progress=on_progress)
 
     return report
 
@@ -114,7 +123,8 @@ def check(package_spec: str, skip_dynamic: bool, verbose: bool, json_output: boo
     package, version = _parse_package_spec(package_spec)
     version = _resolve_version(package, version)
 
-    report = _run_analysis(package, version, skip_dynamic=skip_dynamic, verbose=verbose)
+    report = _run_analysis(package, version, skip_dynamic=skip_dynamic, verbose=verbose,
+                           quiet=json_output)
 
     if json_output:
         output = {
@@ -231,6 +241,174 @@ def install(
     else:
         reporter.print_error("pip install failed.")
         sys.exit(result.returncode)
+
+
+@main.command()
+@click.argument("lockfile", default="requirements.txt")
+@click.option("--skip-dynamic", is_flag=True, help="Static analysis only (faster)")
+@click.option("--workers", default=4, show_default=True, help="Parallel scan workers")
+@click.option("--json-output", "-j", is_flag=True, help="Output as JSON")
+@click.option("--fail-on", default="MALICIOUS",
+              type=click.Choice(["HIGH_RISK", "MALICIOUS"]),
+              help="Exit with error code if any package hits this verdict")
+def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fail_on: str):
+    """
+    Audit all packages in a lockfile / requirements file.
+
+    \b
+    Examples:
+        pipguard audit
+        pipguard audit requirements.txt
+        pipguard audit pyproject.toml --fail-on HIGH_RISK
+        pipguard audit requirements.txt --json-output | jq '.results[] | select(.verdict != "SAFE")'
+    """
+    from pipguard.lockfile import parse_lockfile, detect_lockfile
+    from pipguard.downloader import get_all_versions
+    from packaging.version import Version, InvalidVersion
+
+    lock_path = Path(lockfile) if lockfile != "requirements.txt" else Path(lockfile)
+    if not lock_path.exists():
+        # Try auto-detect
+        detected = detect_lockfile(Path("."))
+        if detected:
+            lock_path = detected
+            console.print(f"[dim]Auto-detected: {lock_path}[/dim]")
+        else:
+            reporter.print_error(f"File not found: {lockfile}")
+            sys.exit(1)
+
+    specs = parse_lockfile(lock_path)
+    if not specs:
+        reporter.print_error(f"No packages found in {lock_path}")
+        sys.exit(1)
+
+    console.print(f"\n[bold cyan]🔍 pipguard audit[/bold cyan] — {lock_path} ({len(specs)} packages)\n")
+
+    results = []
+    engine = AnalysisEngine(skip_dynamic=skip_dynamic)
+
+    def scan_one(spec):
+        version = spec.version
+        if not version:
+            # Resolve latest
+            try:
+                versions = get_all_versions(spec.name)
+                parsed = sorted(
+                    [Version(v) for v in versions
+                     if not Version(v).is_prerelease],
+                    reverse=True
+                )
+                version = str(parsed[0]) if parsed else None
+            except Exception:
+                version = None
+
+        if not version:
+            return {
+                "package": spec.name,
+                "version": "unknown",
+                "score": 0,
+                "verdict": "UNKNOWN",
+                "findings": [],
+            }
+
+        report = engine.analyze(spec.name, version)
+        return {
+            "package": spec.name,
+            "version": version,
+            "score": report.score,
+            "verdict": report.verdict,
+            "safe_version": report.safe_version,
+            "findings": [
+                {"rule_id": f.rule_id, "severity": f.severity.value, "title": f.title}
+                for f in report.findings
+            ],
+        }
+
+    # Parallel scan with progress bar
+    if json_output or not console.is_terminal:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
+            futures = {ex.submit(scan_one, s): s for s in specs}
+            for fut in concurrent.futures.as_completed(futures):
+                results.append(fut.result())
+    else:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Scanning packages...", total=len(specs))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
+                futures = {ex.submit(scan_one, s): s for s in specs}
+                for fut in concurrent.futures.as_completed(futures):
+                    result = fut.result()
+                    results.append(result)
+                    progress.advance(task)
+                    if result["verdict"] in ("MALICIOUS", "HIGH_RISK"):
+                        progress.print(
+                            f"  [red]⚠  {result['package']}=={result['version']} "
+                            f"— {result['verdict']}[/red]"
+                        )
+
+    # Sort by risk score descending
+    results.sort(key=lambda r: r["score"], reverse=True)
+
+    if json_output:
+        click.echo(json.dumps({"lockfile": str(lock_path), "results": results}, indent=2))
+    else:
+        _print_audit_table(results)
+
+    # Exit code
+    risky = [r for r in results if r["verdict"] in (
+        ["MALICIOUS"] if fail_on == "MALICIOUS" else ["MALICIOUS", "HIGH_RISK"]
+    )]
+    if risky:
+        console.print(f"[bold red]✗ {len(risky)} package(s) failed the audit.[/bold red]\n")
+        sys.exit(1)
+    else:
+        console.print(f"[bold green]✓ All {len(results)} packages passed audit.[/bold green]\n")
+
+
+def _print_audit_table(results: list[dict]) -> None:
+    table = Table(
+        box=box.ROUNDED,
+        title="Audit Results",
+        show_header=True,
+        header_style="bold",
+    )
+    table.add_column("Package", ratio=2)
+    table.add_column("Version", width=12)
+    table.add_column("Score", width=7, justify="right")
+    table.add_column("Verdict", width=12)
+    table.add_column("Top Finding", ratio=3)
+
+    verdict_colors = {
+        "SAFE": "green",
+        "LOW_RISK": "yellow",
+        "HIGH_RISK": "orange3",
+        "MALICIOUS": "bold red",
+        "UNKNOWN": "dim",
+    }
+
+    for r in results:
+        color = verdict_colors.get(r["verdict"], "white")
+        top = r["findings"][0]["title"][:45] if r["findings"] else "—"
+        table.add_row(
+            r["package"],
+            r["version"],
+            f"{r['score']:.1f}",
+            f"[{color}]{r['verdict']}[/{color}]",
+            f"[dim]{top}[/dim]" if r["verdict"] == "SAFE" else top,
+        )
+
+    console.print()
+    console.print(table)
+    console.print()
+
+
+# Needed by audit command
+from pathlib import Path
 
 
 @main.command()

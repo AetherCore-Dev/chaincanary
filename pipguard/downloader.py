@@ -1,112 +1,168 @@
 """
 Package downloader — fetch wheel from PyPI without installing.
+Includes retry logic, timeout handling, and cache-safe download.
 """
 from __future__ import annotations
 
-import re
+import hashlib
+import time
 import tempfile
 from pathlib import Path
 from typing import Optional
+
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 
 PYPI_JSON_URL = "https://pypi.org/pypi/{package}/{version}/json"
-PYPI_SIMPLE_URL = "https://pypi.org/simple/{package}/"
+
+# Retry config: 3 attempts, exponential backoff, on 5xx + connection errors
+_RETRY_STRATEGY = Retry(
+    total=3,
+    backoff_factor=0.5,          # waits: 0.5s, 1.0s, 2.0s
+    status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=["GET"],
+    raise_on_status=False,
+)
 
 
-def get_latest_safe_version(package: str, current_version: str) -> Optional[str]:
-    """
-    Find the latest version before current_version.
-    Used to suggest a safe fallback.
-    """
-    try:
-        resp = requests.get(
-            f"https://pypi.org/pypi/{package}/json",
-            timeout=10
-        )
-        if resp.status_code != 200:
-            return None
-        data = resp.json()
-        versions = list(data.get("releases", {}).keys())
-
-        from packaging.version import Version, InvalidVersion
-        parsed = []
-        for v in versions:
-            try:
-                parsed.append(Version(v))
-            except InvalidVersion:
-                pass
-
-        current = Version(current_version)
-        candidates = sorted([v for v in parsed if v < current], reverse=True)
-        return str(candidates[0]) if candidates else None
-    except Exception:
-        return None
+def _make_session() -> requests.Session:
+    """Create a requests session with retry + timeout defaults."""
+    session = requests.Session()
+    adapter = HTTPAdapter(max_retries=_RETRY_STRATEGY)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    session.headers["User-Agent"] = "pipguard/0.1 (security-scanner; https://github.com/allenenli/pipguard)"
+    return session
 
 
-def get_all_versions(package: str) -> list[str]:
-    """Get all available versions of a package from PyPI."""
-    try:
-        resp = requests.get(
-            f"https://pypi.org/pypi/{package}/json",
-            timeout=10
-        )
-        if resp.status_code != 200:
-            return []
-        data = resp.json()
-        return list(data.get("releases", {}).keys())
-    except Exception:
-        return []
+def _verify_hash(path: Path, expected_sha256: str) -> bool:
+    """Verify downloaded file matches PyPI-provided SHA256."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest() == expected_sha256
 
 
 def download_wheel(
     package: str,
     version: str,
     target_dir: Optional[Path] = None,
+    verify_hash: bool = True,
 ) -> Optional[Path]:
     """
-    Download wheel (or sdist) from PyPI to a temp directory.
-    Returns path to downloaded file, or None on failure.
+    Download a wheel (or sdist) from PyPI to target_dir.
+    
+    - Uses retry with exponential backoff
+    - Verifies SHA256 hash from PyPI metadata
+    - Returns the path to the downloaded file, or None on failure
     """
+    session = _make_session()
+
     try:
-        resp = requests.get(
+        resp = session.get(
             PYPI_JSON_URL.format(package=package, version=version),
-            timeout=10
+            timeout=15,
         )
         if resp.status_code == 404:
             return None
         resp.raise_for_status()
-
         data = resp.json()
-        urls = data.get("urls", [])
+    except Exception:
+        return None
 
-        # Prefer wheel over sdist
-        wheel_urls = [u for u in urls if u["filename"].endswith(".whl")]
-        sdist_urls = [u for u in urls if u["filename"].endswith(".tar.gz")]
+    urls = data.get("urls", [])
+    wheel_urls = [u for u in urls if u["filename"].endswith(".whl")]
+    sdist_urls = [u for u in urls if u["filename"].endswith(".tar.gz")]
+    candidates = wheel_urls or sdist_urls
+    if not candidates:
+        return None
 
-        download_candidates = wheel_urls or sdist_urls
-        if not download_candidates:
-            return None
+    artifact = candidates[0]
+    filename = artifact["filename"]
+    url = artifact["url"]
+    expected_sha256 = artifact.get("digests", {}).get("sha256", "")
 
-        artifact = download_candidates[0]
-        filename = artifact["filename"]
-        url = artifact["url"]
+    if target_dir is None:
+        target_dir = Path(tempfile.mkdtemp(prefix="pipguard_"))
+    target_dir.mkdir(parents=True, exist_ok=True)
+    dest = target_dir / filename
 
-        if target_dir is None:
-            target_dir = Path(tempfile.mkdtemp(prefix="pipguard_"))
-
-        target_dir.mkdir(parents=True, exist_ok=True)
-        dest = target_dir / filename
-
-        # Stream download
-        file_resp = requests.get(url, stream=True, timeout=30)
+    # Stream download
+    try:
+        file_resp = session.get(url, stream=True, timeout=60)
         file_resp.raise_for_status()
-
         with open(dest, "wb") as f:
-            for chunk in file_resp.iter_content(chunk_size=8192):
+            for chunk in file_resp.iter_content(chunk_size=65536):
                 f.write(chunk)
+    except Exception:
+        if dest.exists():
+            dest.unlink()
+        return None
 
-        return dest
+    # Verify integrity
+    if verify_hash and expected_sha256:
+        if not _verify_hash(dest, expected_sha256):
+            dest.unlink()
+            return None  # Hash mismatch — don't trust it
 
-    except Exception as e:
+    return dest
+
+
+def get_latest_safe_version(package: str, current_version: str) -> Optional[str]:
+    """Find the latest version before current_version (safe rollback target)."""
+    session = _make_session()
+    try:
+        resp = session.get(
+            f"https://pypi.org/pypi/{package}/json",
+            timeout=15,
+        )
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+
+        from packaging.version import Version, InvalidVersion
+        current = Version(current_version)
+        candidates = []
+        for v in data.get("releases", {}):
+            try:
+                parsed = Version(v)
+                if parsed < current and not parsed.is_prerelease:
+                    candidates.append(parsed)
+            except InvalidVersion:
+                pass
+        return str(max(candidates)) if candidates else None
+    except Exception:
+        return None
+
+
+def get_all_versions(package: str) -> list[str]:
+    """Get all available versions from PyPI."""
+    session = _make_session()
+    try:
+        resp = session.get(
+            f"https://pypi.org/pypi/{package}/json",
+            timeout=15,
+        )
+        if resp.status_code != 200:
+            return []
+        return list(resp.json().get("releases", {}).keys())
+    except Exception:
+        return []
+
+
+def get_pypi_metadata(package: str, version: str) -> Optional[dict]:
+    """Fetch full PyPI metadata for a package version."""
+    session = _make_session()
+    try:
+        resp = session.get(
+            PYPI_JSON_URL.format(package=package, version=version),
+            timeout=15,
+        )
+        if resp.status_code != 200:
+            return None
+        return resp.json()
+    except Exception:
         return None
