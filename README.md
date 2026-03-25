@@ -121,10 +121,18 @@ Version diff: litellm 1.82.6 → 1.82.7
 pipguard install litellm==1.82.7
 ```
 
-### Use as a pip drop-in
+### Recommended workflow
+
+Use `pipguard install` for individual packages and `pipguard audit` in CI.
+Aliasing `pip` to `pipguard` is **not recommended** — it changes timing expectations
+(pipguard downloads + scans before installing) and may break flags like `-e .` or `-r`.
 
 ```bash
-alias pip="pipguard install"
+# Individual package — scan then install
+pipguard install requests==2.32.0
+
+# CI — scan all dependencies before deployment
+pipguard audit requirements.txt --fail-on HIGH_RISK
 ```
 
 ### JSON output (for pipelines)
@@ -231,15 +239,46 @@ No sandboxing, no Docker, no kernel modules. Pure Python static analysis that ru
 
 ## Comparison
 
-| Tool | What it does | .pth detection | No Docker | Lockfile audit | Speed |
+| Tool | Detection scope | Behavioral .pth analysis | No Docker | Lockfile audit | Speed |
 |---|---|---|---|---|---|
-| **pipguard** | Supply chain scanner | ✅ semantic | ✅ | ✅ | ~2s |
-| pip-audit | Known CVEs only | ❌ | ✅ | ✅ | fast |
-| Safety | Known CVEs only | ❌ | ✅ | ✅ | fast |
-| Trivy | Full SBOM+CVE | ❌ | ✅ | ✅ | slow |
-| Bandit | SAST (your code) | ❌ | ✅ | ❌ | fast |
+| **pipguard** | Supply chain behavior | ✅ semantic + content | ✅ | ✅ | ~2s/pkg |
+| pip-audit | Known CVEs + dep confusion | ❌ | ✅ | ✅ | fast |
+| Safety | Known CVEs (advisory DB) | ❌ | ✅ | ✅ | fast |
+| Trivy | SBOM + CVEs (image/repo) | ❌ | ✅ | ✅ | slow |
+| Bandit | SAST (your source code) | ❌ | ✅ | ❌ | fast |
+| socket.dev | Publish-time behavior diff | partial | ✅ | ✅ | fast |
 
-pipguard is not a CVE scanner. It's a behavioral scanner — it looks for what a package *does*, not whether it appears in a database.
+> pipguard is **not** a CVE scanner — it doesn't check advisory databases.
+> It's a **behavioral scanner**: it looks at what a package *does*, not whether
+> it appears in a known-bad list. Use it alongside pip-audit/Safety for full coverage.
+
+---
+
+## Known Limitations
+
+pipguard is a **static behavioral scanner**, not a magic bullet. Know its blind spots:
+
+| Gap | What it means | Workaround |
+|-----|---------------|------------|
+| No C extension analysis | Malicious `.so`/`.pyd` files aren't scanned | Sandbox (v0.3) |
+| No CVE database | Won't catch known vulnerabilities | Use alongside `pip-audit` |
+| No dynamic sandbox | Side-effects on `import` not executed | Static signals only (for now) |
+| Multi-stage payloads | Pkg that downloads payload at runtime looks clean | Network monitoring (v0.3) |
+| Private registries | Can't download from non-public PyPI mirrors | `--offline` flag (v0.2) |
+
+→ Full limitation table: [ROADMAP.md#known-limitations](ROADMAP.md)
+
+---
+
+## Roadmap
+
+| Version | Theme | ETA |
+|---------|-------|-----|
+| **post-0.1** | Scoring fixes, DNS exfil, typosquatting, git deps | ✅ done |
+| **v0.2** | Hash feed, SARIF output, `--timeout`, pre-commit hook | soon |
+| **v0.3** | Lightweight sandbox, package reputation, npm/cargo | later |
+
+→ Full plan: [ROADMAP.md](ROADMAP.md)
 
 ---
 
@@ -252,10 +291,10 @@ pip install -e ".[dev]"
 pytest tests/
 ```
 
-PRs welcome, especially:
+PRs welcome — especially:
 - New malicious hash signatures
-- Detection rules for new attack patterns
-- Language ports (Go, Rust) for faster scanning
+- Detection rules for new attack patterns  
+- False positive reports (real packages that pipguard misflags)
 
 ---
 
@@ -265,4 +304,4 @@ Apache 2.0. See [LICENSE](LICENSE).
 
 ---
 
-*Built after [LiteLLM supply chain attack](https://www.wiz.io/blog/threes-a-crowd-teampcp-trojanizes-litellm-in-continuation-of-campaign), March 2026.*
+*Built after the [LiteLLM supply chain attack](https://www.wiz.io/blog/threes-a-crowd-teampcp-trojanizes-litellm-in-continuation-of-campaign), March 2026.*

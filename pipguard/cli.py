@@ -266,6 +266,13 @@ def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fa
     from pipguard.downloader import get_all_versions
     from packaging.version import Version, InvalidVersion
 
+    # Cap workers to avoid PyPI rate-limiting (429 Too Many Requests)
+    safe_workers = max(1, min(workers, 16))
+    if workers > 16:
+        reporter.print_warning(
+            f"--workers {workers} capped to 16 to avoid PyPI rate-limits."
+        )
+
     lock_path = Path(lockfile) if lockfile != "requirements.txt" else Path(lockfile)
     if not lock_path.exists():
         # Try auto-detect
@@ -341,7 +348,7 @@ def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fa
 
     # Parallel scan with progress bar
     if json_output or not console.is_terminal:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=safe_workers) as ex:
             futures = {ex.submit(scan_one, s): s for s in specs}
             for fut in concurrent.futures.as_completed(futures):
                 results.append(fut.result())
@@ -354,7 +361,7 @@ def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fa
             console=console,
         ) as progress:
             task = progress.add_task("Scanning packages...", total=len(specs))
-            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=safe_workers) as ex:
                 futures = {ex.submit(scan_one, s): s for s in specs}
                 for fut in concurrent.futures.as_completed(futures):
                     result = fut.result()
