@@ -411,7 +411,8 @@ class StaticAnalyzer:
                         title=f".pth file runs code on Python startup: {pth_name}",
                         description=(
                             "This .pth file executes Python code on every interpreter startup. "
-                            "No external data flow detected — likely legitimate (e.g., coverage, setuptools). "
+                            "No external data flow detected — likely legitimate"
+                            " (e.g., coverage, setuptools). "
                             "Verify the code is expected for this package."
                         ),
                         evidence=(
@@ -481,7 +482,10 @@ class StaticAnalyzer:
                         "The .pth file contains network code that phones home "
                         "on every Python interpreter start — classic beacon/exfiltration pattern."
                     ),
-                    evidence=f"File: {pth_name}\nSignals: {analysis.risk_signals}\nContent: {content[:200]}",
+                    evidence=(
+                        f"File: {pth_name}\nSignals: {analysis.risk_signals}"
+                        f"\nContent: {content[:200]}"
+                    ),
                     source="static",
                 )
             )

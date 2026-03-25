@@ -44,14 +44,19 @@ STATIC_RULES = {
         rule_id="OBFUSCATED_CODE",
         severity=Severity.HIGH,
         title="Obfuscated code detected (base64 + exec pattern)",
-        description="Code is hidden via base64 encoding before execution — common malware technique.",
+        description=(
+            "Code is hidden via base64 encoding before execution — common malware technique."
+        ),
         source="static",
     ),
     "NETWORK_IN_SETUP": Rule(
         rule_id="NETWORK_IN_SETUP",
         severity=Severity.HIGH,
         title="Network request in setup.py or install hooks",
-        description="Package makes network calls during installation — could be C2 beacon or data exfiltration.",
+        description=(
+            "Package makes network calls during installation"
+            " — could be C2 beacon or data exfiltration."
+        ),
         source="static",
     ),
     "SUBPROCESS_IN_SETUP": Rule(
@@ -72,7 +77,9 @@ STATIC_RULES = {
         rule_id="KNOWN_MALICIOUS_HASH",
         severity=Severity.CRITICAL,
         title="Known malicious package hash detected",
-        description="This package matches a known malicious artifact in the chaincanary threat database.",
+        description=(
+            "This package matches a known malicious artifact in the chaincanary threat database."
+        ),
         source="static",
     ),
     "SITECUSTOMIZE_MODIFY": Rule(
