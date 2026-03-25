@@ -1,15 +1,15 @@
 """
 Rich terminal reporter — beautiful output for chaincanary results.
 """
+
 from __future__ import annotations
 
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
-from rich import box
 
-from chaincanary.models import RiskReport, Finding, Severity
+from chaincanary.models import Finding, RiskReport, Severity
 
 console = Console()
 
@@ -123,25 +123,26 @@ def _print_verdict_panel(report: RiskReport) -> None:
     if report.is_blocked:
         lines.append("")
         lines.append(
-            f"  [bold red]🚫 Installation BLOCKED.[/bold red] "
-            f"Use [bold]--force[/bold] to override."
+            "  [bold red]🚫 Installation BLOCKED.[/bold red] Use [bold]--force[/bold] to override."
         )
     elif report.should_warn:
         lines.append("")
         lines.append(
-            f"  [yellow]⚠️  Proceeding with caution. Use [bold]--block[/bold] to enforce blocking.[/yellow]"
+            "  [yellow]⚠️  Proceeding with caution. Use [bold]--block[/bold] to enforce blocking.[/yellow]"
         )
 
     panel_content = "\n".join(lines)
     border_color = VERDICT_COLORS.get(report.verdict, "white").replace("bold ", "")
 
     console.print()
-    console.print(Panel(
-        panel_content,
-        title=f"[bold]{report.package}=={report.version}[/bold]",
-        border_style=border_color,
-        padding=(1, 2),
-    ))
+    console.print(
+        Panel(
+            panel_content,
+            title=f"[bold]{report.package}=={report.version}[/bold]",
+            border_style=border_color,
+            padding=(1, 2),
+        )
+    )
     console.print()
 
 
@@ -178,12 +179,14 @@ def print_detail(finding: Finding) -> None:
     color = SEVERITY_COLORS[finding.severity]
     console.print(f"\n[{color}][{finding.severity.value}][/{color}] {finding.title}")
     if finding.evidence:
-        console.print(Panel(
-            finding.evidence,
-            title="Evidence",
-            border_style="dim",
-            padding=(0, 1),
-        ))
+        console.print(
+            Panel(
+                finding.evidence,
+                title="Evidence",
+                border_style="dim",
+                padding=(0, 1),
+            )
+        )
 
 
 def print_error(msg: str) -> None:

@@ -12,26 +12,26 @@ PTH file content analyzer.
 The key insight: legitimate .pth code NEVER exfiltrates data.
 It may run code (setuptools does), but it only talks to itself.
 """
+
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 
 class PthClass(str, Enum):
-    EMPTY = "EMPTY"           # Empty or whitespace only
-    PATH_ONLY = "PATH_ONLY"   # Pure filesystem paths → safe
-    SAFE_CODE = "SAFE_CODE"   # Code with no external data flow → warn only
-    DANGEROUS = "DANGEROUS"   # Code with external data flow → CRITICAL
+    EMPTY = "EMPTY"  # Empty or whitespace only
+    PATH_ONLY = "PATH_ONLY"  # Pure filesystem paths → safe
+    SAFE_CODE = "SAFE_CODE"  # Code with no external data flow → warn only
+    DANGEROUS = "DANGEROUS"  # Code with external data flow → CRITICAL
 
 
 @dataclass
 class PthAnalysis:
     pth_class: PthClass
-    risk_signals: list[str]    # what triggered the classification
-    safe_signals: list[str]    # evidence it might be legitimate
+    risk_signals: list[str]  # what triggered the classification
+    safe_signals: list[str]  # evidence it might be legitimate
     content_preview: str
 
 
@@ -73,11 +73,11 @@ _SAFE_INDICATORS = [
 # Patterns indicating the .pth file is pure path entries
 _PATH_LINE_RE = re.compile(
     r"^("
-    r"\s*"                          # empty line
-    r"|[A-Za-z]:[/\\].*"           # Windows absolute path
-    r"|/[^ \t\n\r]+"               # Unix absolute path
-    r"|\.[/\\][^ \t\n\r]+"         # Relative path
-    r"|\.\.?[/\\][^ \t\n\r]*"      # Parent dir path
+    r"\s*"  # empty line
+    r"|[A-Za-z]:[/\\].*"  # Windows absolute path
+    r"|/[^ \t\n\r]+"  # Unix absolute path
+    r"|\.[/\\][^ \t\n\r]+"  # Relative path
+    r"|\.\.?[/\\][^ \t\n\r]*"  # Parent dir path
     r")$"
 )
 
@@ -90,7 +90,7 @@ _EXTERNAL_NETWORK_IMPORT_RE = re.compile(
 def analyze_pth_content(content: str, package_name: str = "") -> PthAnalysis:
     """
     Classify a .pth file's content and return an analysis.
-    
+
     package_name: used to determine if imports are "own-package" imports
     """
     stripped = content.strip()
@@ -156,7 +156,7 @@ def analyze_pth_content(content: str, package_name: str = "") -> PthAnalysis:
 def pth_severity_from_analysis(analysis: PthAnalysis) -> tuple[str, str]:
     """
     Returns (severity, explanation) based on PthAnalysis.
-    
+
     EMPTY / PATH_ONLY → not reported at all (normal behavior)
     SAFE_CODE         → LOW  (runs code but no external data flow)
     DANGEROUS         → CRITICAL

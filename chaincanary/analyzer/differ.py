@@ -4,10 +4,10 @@ Highlights NEW behaviors that appeared in a specific version.
 This is the key feature that would have caught LiteLLM 1.82.7:
 the .pth file was NOT in 1.82.6 but appeared in 1.82.7.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 from chaincanary.models import BehaviorSnapshot
 
@@ -15,6 +15,7 @@ from chaincanary.models import BehaviorSnapshot
 @dataclass
 class BehaviorDiff:
     """What changed between prev_version and current_version."""
+
     package: str
     prev_version: str
     curr_version: str
@@ -31,11 +32,7 @@ class BehaviorDiff:
 
     @property
     def has_new_suspicious_behavior(self) -> bool:
-        return bool(
-            self.new_pth_files
-            or self.new_network_calls
-            or self.new_subprocesses
-        )
+        return bool(self.new_pth_files or self.new_network_calls or self.new_subprocesses)
 
     @property
     def summary(self) -> str:
@@ -90,7 +87,8 @@ def _normalize_calls(calls: list[str]) -> list[str]:
     for c in calls:
         # Keep just the domain/path part for network calls
         import re
-        m = re.search(r'([\w\-\.]+\.[\w]{2,})', c)
+
+        m = re.search(r"([\w\-\.]+\.[\w]{2,})", c)
         if m:
             normalized.append(m.group(1))
         else:
@@ -113,10 +111,14 @@ def diff_from_static(
     removed = prev_set - curr_set
 
     new_pth = [f for f in added if f.endswith(".pth")]
-    new_suspicious = [f for f in added if any(
-        keyword in f.lower()
-        for keyword in ["hook", "inject", "loader", "init", "startup", "sitecustomize"]
-    )]
+    new_suspicious = [
+        f
+        for f in added
+        if any(
+            keyword in f.lower()
+            for keyword in ["hook", "inject", "loader", "init", "startup", "sitecustomize"]
+        )
+    ]
 
     return {
         "added_files": sorted(added),

@@ -1,16 +1,17 @@
 """
 Integration tests using mock malicious packages.
 """
-import pytest
-from pathlib import Path
-import tempfile
+
 import sys
+import tempfile
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from fixtures.mock_packages import create_mock_litellm_attack, create_clean_litellm
-from chaincanary.analyzer.static import StaticAnalyzer
+from fixtures.mock_packages import create_clean_litellm, create_mock_litellm_attack
+
 from chaincanary.analyzer.differ import diff_from_static
+from chaincanary.analyzer.static import StaticAnalyzer
 from chaincanary.models import RiskReport, Severity
 
 
@@ -65,9 +66,7 @@ class TestLiteLLMAttackSimulation:
     def test_evidence_contains_malicious_domain(self):
         """Evidence should contain the C2 domain."""
         findings = self.static.analyze_wheel(self.attack_wheel)
-        beacon_finding = next(
-            (f for f in findings if f.rule_id == "PTH_NETWORK_BEACON"), None
-        )
+        beacon_finding = next((f for f in findings if f.rule_id == "PTH_NETWORK_BEACON"), None)
         assert beacon_finding is not None
         assert "litellm.cloud" in beacon_finding.evidence
 

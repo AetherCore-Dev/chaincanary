@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "chaincanary"
-version = "0.1.1"
+version = "0.1.2"
 description = "Security scanner for Python packages — detects supply chain attacks before they execute"
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -79,8 +79,8 @@ addopts = "-v"
 [tool.ruff]
 line-length = 100
 target-version = "py39"
-select = ["E", "F", "I", "UP"]
-ignore = ["E501"]
+lint.select = ["E", "F", "I", "UP"]
+lint.ignore = ["E501"]
 
 [tool.mypy]
 python_version = "3.9"

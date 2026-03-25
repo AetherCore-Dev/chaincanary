@@ -1,10 +1,11 @@
 """
 Detection rules for chaincanary.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+
 from chaincanary.models import Severity
 
 

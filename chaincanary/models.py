@@ -1,11 +1,11 @@
 """
 Data models for chaincanary risk reports.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 
 class Severity(str, Enum):
@@ -39,6 +39,7 @@ class Finding:
 @dataclass
 class BehaviorSnapshot:
     """Recorded behaviors of a package version (for diffing)."""
+
     package: str
     version: str
     network_calls: list[str] = field(default_factory=list)
@@ -55,9 +56,9 @@ class RiskReport:
     findings: list[Finding] = field(default_factory=list)
     score: float = 0.0
     verdict: str = "SAFE"  # SAFE | LOW_RISK | HIGH_RISK | MALICIOUS
-    safe_version: Optional[str] = None
-    behavior: Optional[BehaviorSnapshot] = None
-    behavior_diff: Optional[dict] = None  # new behaviors vs prev version
+    safe_version: str | None = None
+    behavior: BehaviorSnapshot | None = None
+    behavior_diff: dict | None = None  # new behaviors vs prev version
 
     def calculate_score(self) -> None:
         # LOW findings are capped at 8 to prevent noise inflation

