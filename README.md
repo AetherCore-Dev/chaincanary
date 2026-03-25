@@ -2,6 +2,9 @@
 
 **Stop malicious Python packages before they execute.**
 
+> The only tool that detected LiteLLM 1.82.7 as MALICIOUS — before any advisory was published.
+> No account. No GitHub App. Nothing leaves your machine.
+
 [![CI](https://github.com/allenenli/chaincanary/actions/workflows/ci.yml/badge.svg)](https://github.com/allenenli/chaincanary/actions)
 [![PyPI version](https://badge.fury.io/py/chaincanary.svg)](https://badge.fury.io/py/chaincanary)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
@@ -174,13 +177,11 @@ That's it. The action will fail your build if any package matches a known attack
 
 ---
 
-## What chaincanary detects
+## The .pth problem — and why every other tool missed it
 
-### .pth attack (LiteLLM 1.82.7 pattern)
+A `.pth` file in Python's `site-packages` runs **on every Python startup**, not just during `pip install`. No other scanner understands this distinction.
 
-`.pth` files in Python site-packages execute **on every interpreter startup** — not just during install. This makes them ideal for persistent backdoors.
-
-chaincanary understands the difference:
+chaincanary is the only tool with a **semantic `.pth` classifier** — it doesn't just flag `.pth` files blindly. It understands what they actually do:
 
 | .pth content | Classification | Finding |
 |---|---|---|
@@ -189,7 +190,13 @@ chaincanary understands the difference:
 | setuptools distutils shim | Safe code | ⚠ LOW |
 | `subprocess.Popen(['curl', ...])` | **Dangerous** | 🔴 CRITICAL |
 
-### Other attack vectors
+**This is why LiteLLM 1.82.7 was flagged as MALICIOUS while every other tool passed it clean.**
+
+---
+
+## What chaincanary detects
+
+### Beyond .pth — other attack vectors
 
 | What | Where | Severity |
 |---|---|---|
@@ -239,18 +246,38 @@ No sandboxing, no Docker, no kernel modules. Pure Python static analysis that ru
 
 ## Comparison
 
-| Tool | Detection scope | Behavioral .pth analysis | No Docker | Lockfile audit | Speed |
+| Tool | .pth semantic analysis | No account needed | Local-only (no data upload) | Offline capable | Open source |
 |---|---|---|---|---|---|
-| **chaincanary** | Supply chain behavior | ✅ semantic + content | ✅ | ✅ | ~2s/pkg |
-| pip-audit | Known CVEs + dep confusion | ❌ | ✅ | ✅ | fast |
-| Safety | Known CVEs (advisory DB) | ❌ | ✅ | ✅ | fast |
-| Trivy | SBOM + CVEs (image/repo) | ❌ | ✅ | ✅ | slow |
-| Bandit | SAST (your source code) | ❌ | ✅ | ❌ | fast |
-| socket.dev | Publish-time behavior diff | partial | ✅ | ✅ | fast |
+| **chaincanary** | ✅ **4-category classifier** | ✅ | ✅ | ✅ | ✅ |
+| socket.dev | ❌ | ❌ requires GitHub App | ❌ uploads your repo | ❌ | ❌ SaaS |
+| pip-audit | ❌ | ✅ | ✅ | partial | ✅ |
+| Safety | ❌ | ❌ requires account | ✅ | ❌ | partial |
+| Trivy | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Bandit | ❌ (SAST only) | ✅ | ✅ | ✅ | ✅ |
 
-> chaincanary is **not** a CVE scanner — it doesn't check advisory databases.
-> It's a **behavioral scanner**: it looks at what a package *does*, not whether
-> it appears in a known-bad list. Use it alongside pip-audit/Safety for full coverage.
+> **chaincanary is the only tool with `.pth` semantic analysis.**
+> Every other tool would have passed LiteLLM 1.82.7 as clean.
+
+---
+
+## Why not socket.dev?
+
+socket.dev is a great product — but it's built for a different threat model:
+
+| | chaincanary | socket.dev |
+|---|---|---|
+| Setup | `pip install chaincanary` | Install GitHub App + create account |
+| Data privacy | Nothing leaves your machine | Your repo metadata is sent to their servers |
+| `.pth` detection | ✅ Semantic 4-category classifier | ❌ Not detected |
+| Works offline | ✅ | ❌ |
+| Cost | Free, open source | Paid (beyond free tier) |
+| Use case | Pre-install scan, CI audit | Continuous repo monitoring |
+
+**The bottom line:** socket.dev would have passed LiteLLM 1.82.7 as clean.
+chaincanary catches the `.pth` pattern — because it's the only tool that understands what `.pth` files do.
+
+> chaincanary is **not** a CVE scanner — use it alongside `pip-audit` or `Safety` for advisory DB coverage.
+> It's a **behavioral scanner**: it looks at what a package *does*, not just whether it appears on a known-bad list.
 
 ---
 

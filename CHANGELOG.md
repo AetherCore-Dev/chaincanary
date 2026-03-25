@@ -167,3 +167,10 @@ exactly this.
 | KNOWN_MALICIOUS_HASH | CRITICAL | SHA256 hash database match |
 | WHEEL_PATH_TRAVERSAL | CRITICAL | directory escape in wheel |
 | WHEEL_ZIP_BOMB | HIGH | excessive file count |
+
+## [0.1.5] - 2026-03-26
+
+### Changed
+- README: rewrite comparison section — explicit "Why not socket.dev?" table
+- README: promote .pth semantic classifier to top-level section with clearer framing
+- README: hero tagline highlights "only tool that detected LiteLLM 1.82.7 as MALICIOUS"
