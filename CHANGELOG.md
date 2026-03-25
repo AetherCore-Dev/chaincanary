@@ -82,6 +82,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [0.1.1] — 2026-03-26
+
+### 🔧 Fix: PyPI trusted publishing configuration
+
+- Switched from manual twine upload to GitHub Actions OIDC trusted publishing
+- No functional changes to detection engine
+
+---
+
 ## [0.1.0] — 2026-03-26
 
 ### 🔄 Renamed: pipguard → chaincanary
