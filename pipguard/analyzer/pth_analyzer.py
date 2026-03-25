@@ -41,7 +41,7 @@ _DANGEROUS_PATTERNS = [
     (r"\burlopen\s*\(", "urllib network call"),
     (r"\brequests\s*\.", "requests network call"),
     (r"\bhttpx\s*\.", "httpx network call"),
-    (r"\bsocket\s*\.", "raw socket"),
+    (r"\bsocket\s*\.", "raw socket (possible DNS exfil)"),
     (r"\bsmtplib\s*\.", "SMTP (email exfiltration?)"),
     (r"\bftplib\s*\.", "FTP connection"),
     # Subprocess / shell execution

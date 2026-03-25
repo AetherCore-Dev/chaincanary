@@ -14,6 +14,7 @@ from pipguard.analyzer.static import StaticAnalyzer
 from pipguard.analyzer.dynamic import DynamicAnalyzer
 from pipguard.analyzer.differ import diff_from_static
 from pipguard.downloader import download_wheel, get_latest_safe_version
+from pipguard.safety_checks import check_typosquatting
 
 console = Console(stderr=True)
 
@@ -35,15 +36,30 @@ class AnalysisEngine:
         version: str,
         on_progress=None,
     ) -> RiskReport:
-        """
-        Full analysis pipeline for a package.
-        on_progress: optional callback(step: str)
-        """
         report = RiskReport(package=package, version=version)
 
         def progress(msg: str):
             if on_progress:
                 on_progress(msg)
+
+        # ── Step 0: Typosquatting check (no download needed) ─────────
+        typo = check_typosquatting(package)
+        if typo:
+            report.findings.append(Finding(
+                rule_id="TYPOSQUATTING",
+                severity=Severity.HIGH if typo["likely_typosquat"] else Severity.MEDIUM,
+                title=f"Package name resembles '{typo['target']}' (edit distance: {typo['distance']})",
+                description=(
+                    f"'{package}' is suspiciously similar to the popular package "
+                    f"'{typo['target']}' (similarity: {typo['similarity']:.0%}, "
+                    f"edit distance: {typo['distance']}). "
+                    "Typosquatting is a common supply chain attack vector — "
+                    "verify you spelled the package name correctly."
+                ),
+                evidence=f"Input: {package!r}  →  Popular package: {typo['target']!r}",
+                source="static",
+            ))
+            report.calculate_score()
 
         with tempfile.TemporaryDirectory(prefix="pipguard_") as tmpdir:
             tmp_path = Path(tmpdir)
@@ -64,7 +80,7 @@ class AnalysisEngine:
 
             # ── Step 2: Static Analysis ──────────────────────────────
             progress("Running static analysis...")
-            static_findings = self.static.analyze_wheel(wheel_path)
+            static_findings = self.static.analyze_wheel(wheel_path, package)
             report.findings.extend(static_findings)
             report.calculate_score()
 
@@ -77,22 +93,19 @@ class AnalysisEngine:
                 file_diff = diff_from_static(prev_files, curr_files)
                 report.behavior_diff = file_diff
 
-                # New .pth files are a critical signal even if static missed them
                 if file_diff.get("new_pth_files"):
                     already_reported = any(
                         f.rule_id == "PTH_FILE_INSTALL" for f in report.findings
                     )
                     if not already_reported:
-                        from pipguard.analyzer.rules import STATIC_RULES
-                        rule = STATIC_RULES["PTH_FILE_INSTALL"]
                         report.findings.append(Finding(
                             rule_id="PTH_FILE_NEW_IN_VERSION",
                             severity=Severity.CRITICAL,
                             title=".pth file ADDED in this version (not in previous)",
                             description=(
-                                f"This version introduced a new .pth file that "
-                                f"was NOT present in the previous version. "
-                                f"This is the exact attack vector used in LiteLLM 1.82.7."
+                                "This version introduced a new .pth file that "
+                                "was NOT present in the previous version. "
+                                "This is the exact attack vector used in LiteLLM 1.82.7."
                             ),
                             evidence=(
                                 f"New files: {file_diff['new_pth_files']}\n"
@@ -102,7 +115,6 @@ class AnalysisEngine:
                         ))
                         report.calculate_score()
 
-                # Suspicious new files
                 if file_diff.get("new_suspicious_files"):
                     report.findings.append(Finding(
                         rule_id="SUSPICIOUS_NEW_FILES",
@@ -121,7 +133,6 @@ class AnalysisEngine:
                     package, version, wheel_path
                 )
                 report.behavior = behavior
-                # Filter out info-level docker unavailable notice from findings
                 real_findings = [
                     f for f in dynamic_findings
                     if f.rule_id not in ("DOCKER_UNAVAILABLE",)
@@ -129,12 +140,62 @@ class AnalysisEngine:
                 report.findings.extend(real_findings)
                 report.calculate_score()
 
-            # ── Step 5: Safe version lookup ──────────────────────────
+            # ── Step 5: Safe version lookup + validation ─────────────
             if report.verdict in ("HIGH_RISK", "MALICIOUS"):
-                progress("Looking up safe version...")
-                report.safe_version = get_latest_safe_version(package, version)
+                progress("Finding and validating safe version...")
+                report.safe_version = self._find_validated_safe_version(
+                    package, version, tmp_path
+                )
 
         return report
+
+    def _find_validated_safe_version(
+        self,
+        package: str,
+        current_version: str,
+        tmp_path: Path,
+        max_candidates: int = 3,
+    ) -> Optional[str]:
+        """
+        Find and validate a safe rollback version.
+        Unlike get_latest_safe_version(), this actually scans candidates
+        to avoid recommending another compromised version.
+        """
+        from pipguard.downloader import get_all_versions
+        from packaging.version import Version, InvalidVersion
+
+        try:
+            all_versions = get_all_versions(package)
+            current = Version(current_version)
+            candidates = sorted(
+                [Version(v) for v in all_versions
+                 if not Version(v).is_prerelease
+                 and Version(v) < current],
+                reverse=True
+            )[:max_candidates]
+        except Exception:
+            return None
+
+        for candidate in candidates:
+            v_str = str(candidate)
+            # Quick static scan of candidate
+            try:
+                cand_dir = tmp_path / f"safe_candidate_{v_str}"
+                cand_dir.mkdir(exist_ok=True)
+                whl = download_wheel(package, v_str, cand_dir)
+                if not whl:
+                    continue
+                findings = self.static.analyze_wheel(whl, package)
+                # Only recommend if clean or low risk
+                from pipguard.models import RiskReport as _R
+                r = _R(package=package, version=v_str, findings=findings)
+                r.calculate_score()
+                if r.verdict in ("SAFE", "LOW_RISK"):
+                    return v_str
+            except Exception:
+                continue
+
+        return None  # No safe version found in recent candidates
 
     def _get_prev_version_wheel(
         self,
@@ -142,11 +203,10 @@ class AnalysisEngine:
         current_version: str,
         tmp_path: Path,
     ) -> Optional[Path]:
-        """Download the previous version for comparison."""
+        prev_version = get_latest_safe_version(package, current_version)
+        if not prev_version:
+            return None
         try:
-            prev_version = get_latest_safe_version(package, current_version)
-            if not prev_version:
-                return None
             prev_dir = tmp_path / "prev"
             prev_dir.mkdir(exist_ok=True)
             return download_wheel(package, prev_version, prev_dir)

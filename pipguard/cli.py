@@ -288,6 +288,21 @@ def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fa
     engine = AnalysisEngine(skip_dynamic=skip_dynamic)
 
     def scan_one(spec):
+        # ── Git dependencies: flag immediately, don't scan PyPI ──────
+        if spec.is_git_dep:
+            return {
+                "package": spec.name,
+                "version": "git",
+                "score": 5.0,
+                "verdict": "HIGH_RISK",
+                "safe_version": None,
+                "findings": [{
+                    "rule_id": "GIT_DEPENDENCY",
+                    "severity": "HIGH",
+                    "title": f"Git dependency bypasses PyPI review: {spec.git_url or spec.name}",
+                }],
+            }
+
         version = spec.version
         if not version:
             # Resolve latest

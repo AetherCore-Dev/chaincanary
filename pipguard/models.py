@@ -60,8 +60,15 @@ class RiskReport:
     behavior_diff: Optional[dict] = None  # new behaviors vs prev version
 
     def calculate_score(self) -> None:
-        raw = sum(SEVERITY_WEIGHTS.get(f.severity.value, 0) for f in self.findings)
+        # LOW findings are capped at 8 to prevent noise inflation
+        low_findings = [f for f in self.findings if f.severity == Severity.LOW]
+        other_findings = [f for f in self.findings if f.severity != Severity.LOW]
+        capped_low = low_findings[:8]
+
+        raw = sum(SEVERITY_WEIGHTS.get(f.severity.value, 0) for f in other_findings + capped_low)
         self.score = min(10.0, raw)
+
+        # Numeric threshold baseline
         if self.score <= 2.0:
             self.verdict = "SAFE"
         elif self.score <= 4.0:
@@ -70,6 +77,25 @@ class RiskReport:
             self.verdict = "HIGH_RISK"
         else:
             self.verdict = "MALICIOUS"
+
+        # Severity-based floor overrides (prevents score gaming)
+        critical_count = sum(1 for f in self.findings if f.severity == Severity.CRITICAL)
+        high_count = sum(1 for f in self.findings if f.severity == Severity.HIGH)
+
+        _VERDICTS = ["SAFE", "LOW_RISK", "HIGH_RISK", "MALICIOUS"]
+
+        def _bump(current: str, floor: str) -> str:
+            return floor if _VERDICTS.index(floor) > _VERDICTS.index(current) else current
+
+        # Any CRITICAL → at minimum HIGH_RISK; 2+ CRITICAL → MALICIOUS
+        if critical_count >= 2:
+            self.verdict = _bump(self.verdict, "MALICIOUS")
+        elif critical_count == 1:
+            self.verdict = _bump(self.verdict, "HIGH_RISK")
+
+        # 3+ HIGH without CRITICAL → HIGH_RISK minimum
+        if high_count >= 3:
+            self.verdict = _bump(self.verdict, "HIGH_RISK")
 
     @property
     def is_blocked(self) -> bool:
