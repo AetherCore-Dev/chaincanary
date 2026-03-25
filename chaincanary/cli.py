@@ -1,5 +1,5 @@
 """
-CLI entry point for pipguard.
+CLI entry point for chaincanary.
 """
 from __future__ import annotations
 
@@ -19,8 +19,8 @@ from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 from rich import box
 
-from pipguard.engine import AnalysisEngine
-from pipguard import reporter
+from chaincanary.engine import AnalysisEngine
+from chaincanary import reporter
 
 console = Console()
 
@@ -38,7 +38,7 @@ def _resolve_version(package: str, version: Optional[str]) -> str:
     """If version is None, resolve to latest from PyPI."""
     if version:
         return version
-    from pipguard.downloader import get_all_versions
+    from chaincanary.downloader import get_all_versions
     from packaging.version import Version, InvalidVersion
     versions = get_all_versions(package)
     if not versions:
@@ -90,17 +90,17 @@ def _run_analysis(
 
 
 @click.group()
-@click.version_option(prog_name="pipguard")
+@click.version_option(prog_name="chaincanary")
 def main():
     """
     \b
-    pipguard — pip installation security sandbox
+    chaincanary — pip installation security sandbox
     Detects supply chain attacks before they compromise your system.
 
     \b
     Quick start:
-        pipguard check litellm==1.82.7
-        pipguard install requests
+        chaincanary check litellm==1.82.7
+        chaincanary install requests
     """
     pass
 
@@ -116,9 +116,9 @@ def check(package_spec: str, skip_dynamic: bool, verbose: bool, json_output: boo
 
     \b
     Examples:
-        pipguard check litellm==1.82.7
-        pipguard check litellm==1.82.7 --verbose
-        pipguard check requests --json-output
+        chaincanary check litellm==1.82.7
+        chaincanary check litellm==1.82.7 --verbose
+        chaincanary check requests --json-output
     """
     package, version = _parse_package_spec(package_spec)
     version = _resolve_version(package, version)
@@ -179,9 +179,9 @@ def install(
 
     \b
     Examples:
-        pipguard install litellm==1.82.7
-        pipguard install litellm --block-on HIGH_RISK
-        pipguard install litellm==1.82.7 --force  # override block
+        chaincanary install litellm==1.82.7
+        chaincanary install litellm --block-on HIGH_RISK
+        chaincanary install litellm==1.82.7 --force  # override block
     """
     package, version = _parse_package_spec(package_spec)
     version = _resolve_version(package, version)
@@ -257,13 +257,13 @@ def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fa
 
     \b
     Examples:
-        pipguard audit
-        pipguard audit requirements.txt
-        pipguard audit pyproject.toml --fail-on HIGH_RISK
-        pipguard audit requirements.txt --json-output | jq '.results[] | select(.verdict != "SAFE")'
+        chaincanary audit
+        chaincanary audit requirements.txt
+        chaincanary audit pyproject.toml --fail-on HIGH_RISK
+        chaincanary audit requirements.txt --json-output | jq '.results[] | select(.verdict != "SAFE")'
     """
-    from pipguard.lockfile import parse_lockfile, detect_lockfile
-    from pipguard.downloader import get_all_versions
+    from chaincanary.lockfile import parse_lockfile, detect_lockfile
+    from chaincanary.downloader import get_all_versions
     from packaging.version import Version, InvalidVersion
 
     # Cap workers to avoid PyPI rate-limiting (429 Too Many Requests)
@@ -289,7 +289,7 @@ def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fa
         reporter.print_error(f"No packages found in {lock_path}")
         sys.exit(1)
 
-    console.print(f"\n[bold cyan]🔍 pipguard audit[/bold cyan] — {lock_path} ({len(specs)} packages)\n")
+    console.print(f"\n[bold cyan]🔍 chaincanary audit[/bold cyan] — {lock_path} ({len(specs)} packages)\n")
 
     results = []
     engine = AnalysisEngine(skip_dynamic=skip_dynamic)
@@ -444,26 +444,26 @@ def diff(package: str, version_a: str, version_b: str, json_output: bool):
 
     \b
     Example:
-        pipguard diff litellm 1.82.6 1.82.7
+        chaincanary diff litellm 1.82.6 1.82.7
 
     This shows exactly what changed between versions — new files,
     new network behavior, new persistence mechanisms.
     """
     import tempfile
     from pathlib import Path
-    from pipguard.downloader import download_wheel
-    from pipguard.analyzer.static import StaticAnalyzer
-    from pipguard.analyzer.differ import diff_from_static
+    from chaincanary.downloader import download_wheel
+    from chaincanary.analyzer.static import StaticAnalyzer
+    from chaincanary.analyzer.differ import diff_from_static
 
     console.print(
-        f"\n[bold cyan]🔍 pipguard diff[/bold cyan] — "
+        f"\n[bold cyan]🔍 chaincanary diff[/bold cyan] — "
         f"[bold]{package}[/bold] "
         f"[dim]{version_a}[/dim] → [bold]{version_b}[/bold]\n"
     )
 
     static = StaticAnalyzer()
 
-    with tempfile.TemporaryDirectory(prefix="pipguard_diff_") as tmpdir:
+    with tempfile.TemporaryDirectory(prefix="chaincanary_diff_") as tmpdir:
         tmp = Path(tmpdir)
 
         console.print(f"[dim]Downloading {package}=={version_a}...[/dim]")

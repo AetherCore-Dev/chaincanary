@@ -1,9 +1,9 @@
-# 🛡️ pipguard
+# 🛡️ chaincanary
 
 **Stop malicious Python packages before they execute.**
 
-[![CI](https://github.com/allenenli/pipguard/actions/workflows/ci.yml/badge.svg)](https://github.com/allenenli/pipguard/actions)
-[![PyPI version](https://badge.fury.io/py/pipguard.svg)](https://badge.fury.io/py/pipguard)
+[![CI](https://github.com/allenenli/chaincanary/actions/workflows/ci.yml/badge.svg)](https://github.com/allenenli/chaincanary/actions)
+[![PyPI version](https://badge.fury.io/py/chaincanary.svg)](https://badge.fury.io/py/chaincanary)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 
@@ -24,21 +24,21 @@ subprocess.Popen(
 
 This file runs **every time you start Python** — not just during `pip install`. It was downloaded ~95 million times per month. The package was flagged and removed, but not before significant exposure.
 
-pipguard was built to catch this.
+chaincanary was built to catch this.
 
 ---
 
 ## Quick demo
 
 ```bash
-pip install pipguard
+pip install chaincanary
 
 # Scan LiteLLM 1.82.7 (the compromised version)
-pipguard check litellm 1.82.7
+chaincanary check litellm 1.82.7
 ```
 
 ```
-🔍 pipguard — Analyzing litellm==1.82.7
+🔍 chaincanary — Analyzing litellm==1.82.7
 
 ╭────────────┬──────────────────────────────┬──────────────────────────────────────╮
 │ Severity   │ Rule                         │ Title                                │
@@ -59,7 +59,7 @@ pipguard check litellm 1.82.7
 ## Install
 
 ```bash
-pip install pipguard
+pip install chaincanary
 ```
 
 Requires Python 3.9+. No Docker. No root. Works on Linux, macOS, Windows.
@@ -71,20 +71,20 @@ Requires Python 3.9+. No Docker. No root. Works on Linux, macOS, Windows.
 ### Scan a single package
 
 ```bash
-pipguard check requests 2.28.0
-pipguard check litellm latest
+chaincanary check requests 2.28.0
+chaincanary check litellm latest
 ```
 
 ### Audit your entire project
 
 ```bash
-pipguard audit requirements.txt
-pipguard audit pyproject.toml
+chaincanary audit requirements.txt
+chaincanary audit pyproject.toml
 ```
 
 Output:
 ```
-🔍 pipguard audit — requirements.txt (42 packages)
+🔍 chaincanary audit — requirements.txt (42 packages)
 
 Scanning packages... ████████████████████████ 100%
 
@@ -103,7 +103,7 @@ Scanning packages... ███████████████████�
 ### Compare two versions
 
 ```bash
-pipguard diff litellm 1.82.6 1.82.7
+chaincanary diff litellm 1.82.6 1.82.7
 ```
 
 ```
@@ -118,30 +118,30 @@ Version diff: litellm 1.82.6 → 1.82.7
 
 ```bash
 # Scans before installing, blocks if malicious
-pipguard install litellm==1.82.7
+chaincanary install litellm==1.82.7
 ```
 
 ### Recommended workflow
 
-Use `pipguard install` for individual packages and `pipguard audit` in CI.
-Aliasing `pip` to `pipguard` is **not recommended** — it changes timing expectations
-(pipguard downloads + scans before installing) and may break flags like `-e .` or `-r`.
+Use `chaincanary install` for individual packages and `chaincanary audit` in CI.
+Aliasing `pip` to `chaincanary` is **not recommended** — it changes timing expectations
+(chaincanary downloads + scans before installing) and may break flags like `-e .` or `-r`.
 
 ```bash
 # Individual package — scan then install
-pipguard install requests==2.32.0
+chaincanary install requests==2.32.0
 
 # CI — scan all dependencies before deployment
-pipguard audit requirements.txt --fail-on HIGH_RISK
+chaincanary audit requirements.txt --fail-on HIGH_RISK
 ```
 
 ### JSON output (for pipelines)
 
 ```bash
-pipguard check litellm 1.82.7 --json-output | jq '.verdict'
+chaincanary check litellm 1.82.7 --json-output | jq '.verdict'
 # "MALICIOUS"
 
-pipguard audit requirements.txt --json-output \
+chaincanary audit requirements.txt --json-output \
   | jq '.results[] | select(.verdict != "SAFE")'
 ```
 
@@ -164,7 +164,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Scan dependencies for supply chain attacks
-        uses: allenenli/pipguard@v0.1.0
+        uses: allenenli/chaincanary@v0.1.0
         with:
           requirements: requirements.txt
           fail-on: MALICIOUS   # or HIGH_RISK for stricter mode
@@ -174,13 +174,13 @@ That's it. The action will fail your build if any package matches a known attack
 
 ---
 
-## What pipguard detects
+## What chaincanary detects
 
 ### .pth attack (LiteLLM 1.82.7 pattern)
 
 `.pth` files in Python site-packages execute **on every interpreter startup** — not just during install. This makes them ideal for persistent backdoors.
 
-pipguard understands the difference:
+chaincanary understands the difference:
 
 | .pth content | Classification | Finding |
 |---|---|---|
@@ -201,7 +201,7 @@ pipguard understands the difference:
 | Path traversal in wheel zip | `.whl` structure | CRITICAL |
 | Known malicious SHA256 hash | `.whl` file | CRITICAL |
 
-### What pipguard does NOT do
+### What chaincanary does NOT do
 
 - Does not install packages
 - Does not execute any package code
@@ -216,7 +216,7 @@ pipguard understands the difference:
 ```
 pip install request      ← your intent
       ↓
-pipguard                 ← intercepts
+chaincanary                 ← intercepts
       ↓
 Download wheel (no install, no execute)
       ↓
@@ -241,14 +241,14 @@ No sandboxing, no Docker, no kernel modules. Pure Python static analysis that ru
 
 | Tool | Detection scope | Behavioral .pth analysis | No Docker | Lockfile audit | Speed |
 |---|---|---|---|---|---|
-| **pipguard** | Supply chain behavior | ✅ semantic + content | ✅ | ✅ | ~2s/pkg |
+| **chaincanary** | Supply chain behavior | ✅ semantic + content | ✅ | ✅ | ~2s/pkg |
 | pip-audit | Known CVEs + dep confusion | ❌ | ✅ | ✅ | fast |
 | Safety | Known CVEs (advisory DB) | ❌ | ✅ | ✅ | fast |
 | Trivy | SBOM + CVEs (image/repo) | ❌ | ✅ | ✅ | slow |
 | Bandit | SAST (your source code) | ❌ | ✅ | ❌ | fast |
 | socket.dev | Publish-time behavior diff | partial | ✅ | ✅ | fast |
 
-> pipguard is **not** a CVE scanner — it doesn't check advisory databases.
+> chaincanary is **not** a CVE scanner — it doesn't check advisory databases.
 > It's a **behavioral scanner**: it looks at what a package *does*, not whether
 > it appears in a known-bad list. Use it alongside pip-audit/Safety for full coverage.
 
@@ -256,7 +256,7 @@ No sandboxing, no Docker, no kernel modules. Pure Python static analysis that ru
 
 ## Known Limitations
 
-pipguard is a **static behavioral scanner**, not a magic bullet. Know its blind spots:
+chaincanary is a **static behavioral scanner**, not a magic bullet. Know its blind spots:
 
 | Gap | What it means | Workaround |
 |-----|---------------|------------|
@@ -285,8 +285,8 @@ pipguard is a **static behavioral scanner**, not a magic bullet. Know its blind 
 ## Contributing
 
 ```bash
-git clone https://github.com/allenenli/pipguard
-cd pipguard
+git clone https://github.com/allenenli/chaincanary
+cd chaincanary
 pip install -e ".[dev]"
 pytest tests/
 ```
@@ -294,7 +294,7 @@ pytest tests/
 PRs welcome — especially:
 - New malicious hash signatures
 - Detection rules for new attack patterns  
-- False positive reports (real packages that pipguard misflags)
+- False positive reports (real packages that chaincanary misflags)
 
 ---
 

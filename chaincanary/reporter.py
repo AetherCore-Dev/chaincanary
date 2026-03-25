@@ -1,5 +1,5 @@
 """
-Rich terminal reporter — beautiful output for pipguard results.
+Rich terminal reporter — beautiful output for chaincanary results.
 """
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from rich.table import Table
 from rich.text import Text
 from rich import box
 
-from pipguard.models import RiskReport, Finding, Severity
+from chaincanary.models import RiskReport, Finding, Severity
 
 console = Console()
 
@@ -39,7 +39,7 @@ VERDICT_ICONS = {
 
 def print_scanning(package: str, version: str) -> None:
     console.print(
-        f"\n[bold cyan]🔍 pipguard[/bold cyan] — Analyzing "
+        f"\n[bold cyan]🔍 chaincanary[/bold cyan] — Analyzing "
         f"[bold]{package}=={version}[/bold] ...\n"
     )
 

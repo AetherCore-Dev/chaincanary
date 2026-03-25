@@ -40,17 +40,17 @@ jobs:
           files: dist/*
           generate_release_notes: true
           body: |
-            ## pipguard ${{ github.ref_name }}
+            ## chaincanary ${{ github.ref_name }}
 
             ### Install
             ```bash
-            pip install pipguard==${{ github.ref_name }}
+            pip install chaincanary==${{ github.ref_name }}
             ```
 
             ### Quick scan
             ```bash
-            pipguard check litellm latest
-            pipguard audit requirements.txt
+            chaincanary check litellm latest
+            chaincanary audit requirements.txt
             ```
 
             See [CHANGELOG.md](CHANGELOG.md) for what's new.

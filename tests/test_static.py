@@ -6,8 +6,8 @@ from pathlib import Path
 import tempfile
 import zipfile
 
-from pipguard.analyzer.static import StaticAnalyzer
-from pipguard.models import Severity
+from chaincanary.analyzer.static import StaticAnalyzer
+from chaincanary.models import Severity
 
 
 def make_wheel(name: str, version: str, files: dict[str, str]) -> Path:

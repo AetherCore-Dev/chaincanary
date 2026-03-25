@@ -7,9 +7,9 @@ import zipfile
 import tempfile
 from pathlib import Path
 
-from pipguard.analyzer.static import StaticAnalyzer
-from pipguard.analyzer.pth_analyzer import analyze_pth_content, PthClass
-from pipguard.models import Severity
+from chaincanary.analyzer.static import StaticAnalyzer
+from chaincanary.analyzer.pth_analyzer import analyze_pth_content, PthClass
+from chaincanary.models import Severity
 
 
 def make_wheel(name: str, version: str, files: dict) -> Path:
@@ -210,7 +210,7 @@ class TestLockfileParser:
     """Tests for requirements.txt parsing."""
 
     def test_parse_pinned_requirements(self):
-        from pipguard.lockfile import parse_requirements_txt
+        from chaincanary.lockfile import parse_requirements_txt
         content = "litellm==1.82.7\nrequests==2.28.0\nnumpy>=1.24\n"
         tmpdir = Path(tempfile.mkdtemp())
         req_file = tmpdir / "requirements.txt"
@@ -224,7 +224,7 @@ class TestLockfileParser:
         assert "requests" in names
 
     def test_skip_comments_and_flags(self):
-        from pipguard.lockfile import parse_requirements_txt
+        from chaincanary.lockfile import parse_requirements_txt
         content = (
             "# This is a comment\n"
             "-r other.txt\n"

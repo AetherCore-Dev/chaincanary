@@ -1,1 +1,0 @@
-from pipguard.analyzer import *

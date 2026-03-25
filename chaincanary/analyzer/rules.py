@@ -1,11 +1,11 @@
 """
-Detection rules for pipguard.
+Detection rules for chaincanary.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Callable
-from pipguard.models import Severity
+from chaincanary.models import Severity
 
 
 @dataclass
@@ -71,7 +71,7 @@ STATIC_RULES = {
         rule_id="KNOWN_MALICIOUS_HASH",
         severity=Severity.CRITICAL,
         title="Known malicious package hash detected",
-        description="This package matches a known malicious artifact in the pipguard threat database.",
+        description="This package matches a known malicious artifact in the chaincanary threat database.",
         source="static",
     ),
     "SITECUSTOMIZE_MODIFY": Rule(

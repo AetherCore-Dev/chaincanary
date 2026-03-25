@@ -33,7 +33,7 @@ def _make_session() -> requests.Session:
     adapter = HTTPAdapter(max_retries=_RETRY_STRATEGY)
     session.mount("https://", adapter)
     session.mount("http://", adapter)
-    session.headers["User-Agent"] = "pipguard/0.1 (security-scanner; https://github.com/allenenli/pipguard)"
+    session.headers["User-Agent"] = "chaincanary/0.1 (security-scanner; https://github.com/allenenli/chaincanary)"
     return session
 
 
@@ -86,7 +86,7 @@ def download_wheel(
     expected_sha256 = artifact.get("digests", {}).get("sha256", "")
 
     if target_dir is None:
-        target_dir = Path(tempfile.mkdtemp(prefix="pipguard_"))
+        target_dir = Path(tempfile.mkdtemp(prefix="chaincanary_"))
     target_dir.mkdir(parents=True, exist_ok=True)
     dest = target_dir / filename
 

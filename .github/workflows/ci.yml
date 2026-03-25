@@ -41,11 +41,11 @@ jobs:
         if: matrix.python-version == '3.11'
         run: |
           pip install ruff
-          ruff check pipguard/ --select E,F,I
+          ruff check chaincanary/ --select E,F,I
 
-  # pipguard scans its own dependencies — dogfooding
+  # chaincanary scans its own dependencies — dogfooding
   self-scan:
-    name: Self-audit (pipguard scans itself)
+    name: Self-audit (chaincanary scans itself)
     runs-on: ubuntu-latest
     needs: test
 
@@ -57,15 +57,15 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install pipguard
+      - name: Install chaincanary
         run: pip install -e .
 
-      # pipguard audits its own requirements
+      # chaincanary audits its own requirements
       - name: Audit runtime dependencies
         run: |
           pip freeze | grep -E "^(click|requests|rich|packaging)==" > /tmp/runtime_deps.txt
           cat /tmp/runtime_deps.txt
-          pipguard audit /tmp/runtime_deps.txt --fail-on MALICIOUS
+          chaincanary audit /tmp/runtime_deps.txt --fail-on MALICIOUS
 
   build:
     name: Build & check package

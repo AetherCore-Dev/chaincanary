@@ -1,5 +1,5 @@
 """
-Data models for pipguard risk reports.
+Data models for chaincanary risk reports.
 """
 from __future__ import annotations
 

@@ -1,9 +1,9 @@
-name: 'pipguard — Python Supply Chain Security Scanner'
+name: 'chaincanary — Python Supply Chain Security Scanner'
 description: >
   Scan Python packages for supply chain attacks before they execute.
   Detects malicious .pth files, network beacons, obfuscated code,
   and other attack patterns (as seen in LiteLLM 1.82.7).
-author: 'pipguard contributors'
+author: 'chaincanary contributors'
 
 branding:
   icon: 'shield'
@@ -43,10 +43,10 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
 
-    - name: Install pipguard
+    - name: Install chaincanary
       shell: bash
       run: |
-        pip install pipguard --quiet
+        pip install chaincanary --quiet
 
     - name: Run audit
       id: scan
@@ -61,7 +61,7 @@ runs:
 
         # Scan requirements file
         if [ -f "${{ inputs.requirements }}" ]; then
-          pipguard audit "${{ inputs.requirements }}" $FAIL_FLAG --json-output > audit_result.json 2>/dev/null
+          chaincanary audit "${{ inputs.requirements }}" $FAIL_FLAG --json-output > audit_result.json 2>/dev/null
           AUDIT_EXIT=$?
         else
           echo "Warning: ${{ inputs.requirements }} not found, skipping file audit"
@@ -77,7 +77,7 @@ runs:
             name=$(echo $pkg | cut -d= -f1)
             ver=$(echo $pkg | grep -oP '(?<===)[^=]+' || echo "")
             if [ -n "$ver" ]; then
-              pipguard check "$name" "$ver" $FAIL_FLAG || EXTRA_EXIT=$?
+              chaincanary check "$name" "$ver" $FAIL_FLAG || EXTRA_EXIT=$?
             fi
           done
         fi

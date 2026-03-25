@@ -1,4 +1,4 @@
-# pipguard — Architecture
+# chaincanary — Architecture
 
 > A pip package installation security sandbox that detects supply chain attacks
 > before they compromise your system.
@@ -11,7 +11,7 @@
 ## One-liner
 
 ```
-pipguard is a pip installation sandbox that helps AI developers avoid
+chaincanary is a pip installation sandbox that helps AI developers avoid
 supply chain attacks like LiteLLM 1.82.7.
 ```
 
@@ -30,7 +30,7 @@ supply chain attacks like LiteLLM 1.82.7.
 ## Architecture Overview
 
 ```
-pipguard install <package>==<version>
+chaincanary install <package>==<version>
         │
         ▼
 ┌───────────────────┐
@@ -111,22 +111,22 @@ pipguard install <package>==<version>
 ## MVP Scope (Day 1-3)
 
 ### Day 1: Core Engine
-- [ ] `pipguard/analyzer/static.py` — static analysis
-- [ ] `pipguard/analyzer/dynamic.py` — Docker sandbox
-- [ ] `pipguard/analyzer/rules.py` — detection rules
-- [ ] `pipguard/models.py` — RiskReport, Finding, Severity
+- [ ] `chaincanary/analyzer/static.py` — static analysis
+- [ ] `chaincanary/analyzer/dynamic.py` — Docker sandbox
+- [ ] `chaincanary/analyzer/rules.py` — detection rules
+- [ ] `chaincanary/models.py` — RiskReport, Finding, Severity
 
 ### Day 2: CLI + UX
-- [ ] `pipguard/cli.py` — Click-based CLI
-- [ ] `pipguard/reporter.py` — Rich terminal output
-- [ ] `pipguard/diff.py` — version behavior comparison
-- [ ] Demo: `pipguard install litellm==1.82.7` → catches attack
+- [ ] `chaincanary/cli.py` — Click-based CLI
+- [ ] `chaincanary/reporter.py` — Rich terminal output
+- [ ] `chaincanary/diff.py` — version behavior comparison
+- [ ] Demo: `chaincanary install litellm==1.82.7` → catches attack
 
 ### Day 3: Polish + Publish
-- [ ] `pipguard/integrations/github_actions.py` — GHA integration
+- [ ] `chaincanary/integrations/github_actions.py` — GHA integration
 - [ ] `README.md` — full docs with demo GIF
 - [ ] `pyproject.toml` — publish to PyPI
-- [ ] GitHub Actions CI for pipguard itself
+- [ ] GitHub Actions CI for chaincanary itself
 
 ---
 
@@ -146,8 +146,8 @@ pipguard install <package>==<version>
 ## Project Structure
 
 ```
-pipguard/
-├── pipguard/
+chaincanary/
+├── chaincanary/
 │   ├── __init__.py
 │   ├── cli.py              # Entry point
 │   ├── models.py           # RiskReport, Finding, Severity

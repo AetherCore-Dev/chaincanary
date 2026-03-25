@@ -18,9 +18,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from pipguard.models import Finding, Severity
-from pipguard.analyzer.rules import STATIC_RULES
-from pipguard.analyzer.pth_analyzer import analyze_pth_content, PthClass, pth_severity_from_analysis
+from chaincanary.models import Finding, Severity
+from chaincanary.analyzer.rules import STATIC_RULES
+from chaincanary.analyzer.pth_analyzer import analyze_pth_content, PthClass, pth_severity_from_analysis
 
 
 # ── Safety limits (prevents zip-bomb / resource exhaustion attacks) ────────

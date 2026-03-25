@@ -1,6 +1,6 @@
 # Roadmap
 
-This document tracks what's done, what's in progress, and where pipguard is going.
+This document tracks what's done, what's in progress, and where chaincanary is going.
 
 ---
 
@@ -49,15 +49,15 @@ Fixes identified during multi-angle security review:
 ### Usability
 - [ ] **`--timeout` flag** — per-package download timeout (default 30s)
 - [ ] **`--offline` mode** — skip download, scan local `.whl` files only
-- [ ] **`pipguard update`** — check if hash database is stale and refresh
+- [ ] **`chaincanary update`** — check if hash database is stale and refresh
 - [ ] **`--skip` patterns** — ignore known-safe packages (e.g., `--skip torch,tensorflow`)
   to speed up audit of large lockfiles
 - [ ] **Rich progress bar** — show per-package status during `audit` (currently silent)
 
 ### CI/CD
 - [ ] **SARIF output** — `--sarif-output` for GitHub Security tab integration
-- [ ] **Pre-commit hook** — `pipguard-pre-commit` repo for `pre-commit` framework
-- [ ] **Docker image** — `ghcr.io/allenenli/pipguard:latest` for isolated CI runs
+- [ ] **Pre-commit hook** — `chaincanary-pre-commit` repo for `pre-commit` framework
+- [ ] **Docker image** — `ghcr.io/allenenli/chaincanary:latest` for isolated CI runs
 
 ---
 
@@ -90,7 +90,7 @@ Fixes identified during multi-angle security review:
 
 ## 🚫 Known Limitations (honest)
 
-These are things pipguard **cannot** currently detect well.
+These are things chaincanary **cannot** currently detect well.
 Be aware of them when interpreting results.
 
 ### False negatives (things we miss)
@@ -130,20 +130,20 @@ Be aware of them when interpreting results.
 The short-term goal is developer awareness. Here's the plan:
 
 1. **Launch anchor** — LiteLLM 1.82.7 is a real, recent, high-profile attack.
-   `pipguard check litellm 1.82.7` demonstrating `MALICIOUS` in 2 seconds is
+   `chaincanary check litellm 1.82.7` demonstrating `MALICIOUS` in 2 seconds is
    the killer demo. Make every article/post lead with this.
 
-2. **Show HN post** — "Show HN: pipguard — I built a Python supply chain scanner
+2. **Show HN post** — "Show HN: chaincanary — I built a Python supply chain scanner
    after LiteLLM 1.82.7". Lead with the demo GIF. Target: 50+ upvotes.
 
 3. **GitHub Action** — The easiest star trigger is a CI badge. If developers can add
-   `uses: allenenli/pipguard@v0.1.0` in 30 seconds, they'll star when it catches something.
+   `uses: allenenli/chaincanary@v0.1.0` in 30 seconds, they'll star when it catches something.
 
-4. **Twitter/X thread** — Walk through the LiteLLM attack anatomy + how pipguard catches it.
+4. **Twitter/X thread** — Walk through the LiteLLM attack anatomy + how chaincanary catches it.
    Tag the security community (e.g., @SwisskyRepo, @LiveOverflow).
 
 5. **Dev.to / hashnode post** — Long-form "How .pth files became a supply chain weapon"
-   with pipguard as the solution. Good for SEO.
+   with chaincanary as the solution. Good for SEO.
 
-6. **PyPI page** — Make `pip install pipguard` the first thing people try.
+6. **PyPI page** — Make `pip install chaincanary` the first thing people try.
    First run should feel magical (instant demo output).

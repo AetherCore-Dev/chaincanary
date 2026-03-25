@@ -11,8 +11,8 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
-from pipguard.models import Finding, BehaviorSnapshot, Severity
-from pipguard.analyzer.rules import DYNAMIC_RULES
+from chaincanary.models import Finding, BehaviorSnapshot, Severity
+from chaincanary.analyzer.rules import DYNAMIC_RULES
 
 
 # Docker image used for sandbox

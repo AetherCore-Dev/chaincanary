@@ -11,11 +11,11 @@ import zipfile
 import tempfile
 from pathlib import Path
 
-from pipguard.models import RiskReport, Finding, Severity
-from pipguard.analyzer.static import StaticAnalyzer
-from pipguard.analyzer.pth_analyzer import analyze_pth_content, PthClass
-from pipguard.safety_checks import check_typosquatting
-from pipguard.lockfile import parse_requirements_txt
+from chaincanary.models import RiskReport, Finding, Severity
+from chaincanary.analyzer.static import StaticAnalyzer
+from chaincanary.analyzer.pth_analyzer import analyze_pth_content, PthClass
+from chaincanary.safety_checks import check_typosquatting
+from chaincanary.lockfile import parse_requirements_txt
 
 
 def make_wheel(name: str, version: str, files: dict) -> Path:

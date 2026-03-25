@@ -9,7 +9,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Fixed
 
-**Scoring system overhaul** (`pipguard/models.py`)
+**Scoring system overhaul** (`chaincanary/models.py`)
 - **BUG**: `1×CRITICAL` produced `score=4.0 → LOW_RISK`. Completely wrong — a single
   CRITICAL finding (e.g., phone-home `.pth`) should never be LOW_RISK.
 - Fix: severity-floor override rules added on top of numeric threshold:
@@ -19,7 +19,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - **BUG**: `20×LOW` accumulated to `6.0 → HIGH_RISK` (noise inflation).
 - Fix: LOW findings capped at 8 contributors to score. `20×LOW = 2.4 → LOW_RISK`.
 
-**DNS exfiltration detection** (`pipguard/analyzer/static.py`)
+**DNS exfiltration detection** (`chaincanary/analyzer/static.py`)
 - New rule: `DNS_EXFIL` (HIGH severity)
 - Detects `socket.getaddrinfo()` and `socket.gethostbyname()` with dynamic hostnames in `__init__.py`
 - DNS exfil encodes stolen secrets (env vars, tokens) as subdomains:
@@ -27,35 +27,35 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - DNS traffic bypasses most firewalls — this was a real blind spot.
 - Non-init files with socket (e.g., `server.py`) are **not** flagged → no false positives.
 
-**`sys.modules` bypass detection** (`pipguard/analyzer/static.py`)
+**`sys.modules` bypass detection** (`chaincanary/analyzer/static.py`)
 - New rule: `SYS_MODULES_ACCESS` (MEDIUM severity)
 - Attackers use `sys.modules['requests'].get(...)` to call network functions
   without triggering `import requests` pattern matching.
 - Now detected in `__init__.py`.
 
-**`safe_version` recommendation validation** (`pipguard/engine.py`)
+**`safe_version` recommendation validation** (`chaincanary/engine.py`)
 - **BUG**: Previous version was blindly recommended as rollback without scanning it.
   If `1.82.6` was also compromised, we'd recommend a malicious version.
 - Fix: `_find_validated_safe_version()` runs a quick static scan on up to 3 candidates
   and only recommends versions that pass as SAFE or LOW_RISK.
 
 **`alias pip` removed from README**
-- Using `alias pip="pipguard install"` breaks `-e .`, `-r`, and other pip flags.
+- Using `alias pip="chaincanary install"` breaks `-e .`, `-r`, and other pip flags.
 - Replaced with a clear recommended workflow section.
 
 **Comparison table accuracy** (`README.md`)
 - `Trivy` correctly described as SBOM+CVE scanner (does file-level scanning, not behavioral .pth analysis)
 - `pip-audit` correctly described (does CVE + dependency confusion, not behavioral)
 - `socket.dev` added to table
-- Added clarifying note: use pipguard *alongside* pip-audit/Safety, not instead of
+- Added clarifying note: use chaincanary *alongside* pip-audit/Safety, not instead of
 
-**Workers rate-limit cap** (`pipguard/cli.py`)
+**Workers rate-limit cap** (`chaincanary/cli.py`)
 - `--workers` capped at 16 internally to avoid PyPI 429 rate-limiting
 - Warning printed when user requests more than 16
 
 ### Added
 
-**Typosquatting detection** (`pipguard/safety_checks.py` — new module)
+**Typosquatting detection** (`chaincanary/safety_checks.py` — new module)
 - `check_typosquatting()` using Levenshtein edit distance + SequenceMatcher similarity
 - Database of 100+ most-downloaded PyPI packages
 - Threshold: edit distance ≤ 2 AND similarity ≥ 0.75
@@ -64,7 +64,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - Catches visual substitution attacks: `fIask` (capital I) → `flask`
 - Runs as Step 0 in `AnalysisEngine.analyze()` — no download required
 
-**Git dependency flagging** (`pipguard/lockfile.py`)
+**Git dependency flagging** (`chaincanary/lockfile.py`)
 - `PackageSpec` gains `is_git_dep: bool` and `git_url: Optional[str]`
 - `parse_requirements_txt()` now parses `git+https://`, `-e git+`, `git://` lines
 - Git dependencies are marked HIGH_RISK in `audit` output:
@@ -82,13 +82,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [0.1.0] — 2026-03-26
+
+### 🔄 Renamed: pipguard → chaincanary
+
+The project has been renamed from `pipguard` to `chaincanary`.
+
+**Why:** The name `chaincanary` better captures the tool's purpose — like the
+canary in a coal mine, it's the first signal that something in your supply chain
+has gone wrong. It's also not tied to `pip`, leaving room to expand to other
+ecosystems (npm, cargo, go modules) in the future.
+
+The old PyPI name `pipguard` will publish a stub package pointing to `chaincanary`.
+
+---
+
 ## [0.1.0] — 2026-03-25
 
 ### 🚀 Initial Release
 
-**The short story:** We built pipguard the day LiteLLM 1.82.7 hit the news.
+**The short story:** We built chaincanary the day LiteLLM 1.82.7 hit the news.
 The attack hid a phone-home beacon inside a `.pth` file — a mechanism that
-executes on every Python interpreter startup. pipguard was designed to catch
+executes on every Python interpreter startup. chaincanary was designed to catch
 exactly this.
 
 ### Added
@@ -105,24 +120,24 @@ exactly this.
 - Known malicious hash database (SHA256)
 
 **Version diff**
-- `pipguard diff <pkg> <v1> <v2>` — shows exactly what changed between versions
+- `chaincanary diff <pkg> <v1> <v2>` — shows exactly what changed between versions
 - Flags new `.pth` files, new network imports, behavioral changes
 
 **Lockfile audit**
-- `pipguard audit requirements.txt` — scans all pinned packages in parallel
+- `chaincanary audit requirements.txt` — scans all pinned packages in parallel
 - Supports: requirements.txt, pyproject.toml, Pipfile.lock
 - `--fail-on MALICIOUS|HIGH_RISK` for CI integration
 
 **GitHub Action**
-- Drop-in action: `uses: allenenli/pipguard@v0.1.0`
+- Drop-in action: `uses: allenenli/chaincanary@v0.1.0`
 - Audits your requirements file on every push/PR
 - Fails the build if malicious packages detected
 
 **CLI**
-- `pipguard check <package> <version>` — single package scan
-- `pipguard audit [lockfile]` — batch scan
-- `pipguard diff <pkg> <v1> <v2>` — version comparison
-- `pipguard install <package>` — safe install wrapper
+- `chaincanary check <package> <version>` — single package scan
+- `chaincanary audit [lockfile]` — batch scan
+- `chaincanary diff <pkg> <v1> <v2>` — version comparison
+- `chaincanary install <package>` — safe install wrapper
 - JSON output mode (`--json-output`) for pipeline integration
 
 ### Detection rules (v0.1.0)

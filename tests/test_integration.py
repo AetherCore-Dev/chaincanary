@@ -9,15 +9,15 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
 from fixtures.mock_packages import create_mock_litellm_attack, create_clean_litellm
-from pipguard.analyzer.static import StaticAnalyzer
-from pipguard.analyzer.differ import diff_from_static
-from pipguard.models import RiskReport, Severity
+from chaincanary.analyzer.static import StaticAnalyzer
+from chaincanary.analyzer.differ import diff_from_static
+from chaincanary.models import RiskReport, Severity
 
 
 class TestLiteLLMAttackSimulation:
     """
     Full simulation of the LiteLLM 1.82.7 supply chain attack.
-    These tests document EXACTLY what pipguard catches.
+    These tests document EXACTLY what chaincanary catches.
     """
 
     def setup_method(self):

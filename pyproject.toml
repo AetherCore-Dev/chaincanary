@@ -3,14 +3,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pipguard"
+name = "chaincanary"
 version = "0.1.0"
 description = "Security scanner for Python packages — detects supply chain attacks before they execute"
 readme = "README.md"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.9"
 authors = [
-  { name = "pipguard contributors" },
+  { name = "chaincanary contributors" },
 ]
 keywords = [
   "security",
@@ -51,20 +51,20 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/allenenli/pipguard"
-Repository = "https://github.com/allenenli/pipguard"
-Issues = "https://github.com/allenenli/pipguard/issues"
-Changelog = "https://github.com/allenenli/pipguard/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/allenenli/chaincanary"
+Repository = "https://github.com/allenenli/chaincanary"
+Issues = "https://github.com/allenenli/chaincanary/issues"
+Changelog = "https://github.com/allenenli/chaincanary/blob/main/CHANGELOG.md"
 
 [project.scripts]
-pipguard = "pipguard.cli:main"
+chaincanary = "chaincanary.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["pipguard"]
+packages = ["chaincanary"]
 
 [tool.hatch.build.targets.sdist]
 include = [
-  "pipguard/",
+  "chaincanary/",
   "tests/",
   "README.md",
   "CHANGELOG.md",

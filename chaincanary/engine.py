@@ -9,12 +9,12 @@ from typing import Optional
 
 from rich.console import Console
 
-from pipguard.models import RiskReport, Finding, Severity
-from pipguard.analyzer.static import StaticAnalyzer
-from pipguard.analyzer.dynamic import DynamicAnalyzer
-from pipguard.analyzer.differ import diff_from_static
-from pipguard.downloader import download_wheel, get_latest_safe_version
-from pipguard.safety_checks import check_typosquatting
+from chaincanary.models import RiskReport, Finding, Severity
+from chaincanary.analyzer.static import StaticAnalyzer
+from chaincanary.analyzer.dynamic import DynamicAnalyzer
+from chaincanary.analyzer.differ import diff_from_static
+from chaincanary.downloader import download_wheel, get_latest_safe_version
+from chaincanary.safety_checks import check_typosquatting
 
 console = Console(stderr=True)
 
@@ -61,7 +61,7 @@ class AnalysisEngine:
             ))
             report.calculate_score()
 
-        with tempfile.TemporaryDirectory(prefix="pipguard_") as tmpdir:
+        with tempfile.TemporaryDirectory(prefix="chaincanary_") as tmpdir:
             tmp_path = Path(tmpdir)
 
             # ── Step 1: Download ─────────────────────────────────────
@@ -161,7 +161,7 @@ class AnalysisEngine:
         Unlike get_latest_safe_version(), this actually scans candidates
         to avoid recommending another compromised version.
         """
-        from pipguard.downloader import get_all_versions
+        from chaincanary.downloader import get_all_versions
         from packaging.version import Version, InvalidVersion
 
         try:
@@ -187,7 +187,7 @@ class AnalysisEngine:
                     continue
                 findings = self.static.analyze_wheel(whl, package)
                 # Only recommend if clean or low risk
-                from pipguard.models import RiskReport as _R
+                from chaincanary.models import RiskReport as _R
                 r = _R(package=package, version=v_str, findings=findings)
                 r.calculate_score()
                 if r.verdict in ("SAFE", "LOW_RISK"):
