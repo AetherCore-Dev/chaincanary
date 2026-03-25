@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev]"
+
+      - name: Lint
+        run: |
+          ruff check pipguard/
+
+      - name: Test
+        run: |
+          pytest tests/ -v --cov=pipguard --cov-report=term-missing
+
+  # pipguard scans itself — dogfooding
+  self-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pipguard
+        run: pip install -e .
+      - name: Self-check (static only in CI for speed)
+        run: |
+          # Check our own dependencies
+          pipguard check click --skip-dynamic --json-output || true
+          pipguard check rich --skip-dynamic --json-output || true

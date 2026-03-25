@@ -1,0 +1,8 @@
+{
+  "sha256": [
+    "PLACEHOLDER_litellm_1.82.7_malicious_hash_replace_with_real_value"
+  ],
+  "notes": {
+    "PLACEHOLDER_litellm_1.82.7_malicious_hash_replace_with_real_value": "litellm 1.82.7 - TeamPCP supply chain attack 2026-03-24, installs litellm_init.pth"
+  }
+}
