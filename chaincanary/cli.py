@@ -275,7 +275,8 @@ def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fa
         chaincanary audit
         chaincanary audit requirements.txt
         chaincanary audit pyproject.toml --fail-on HIGH_RISK
-        chaincanary audit requirements.txt --json-output | jq '.results[] | select(.verdict != "SAFE")'
+        chaincanary audit requirements.txt --json-output | jq \
+'.results[] | select(.verdict != "SAFE")'
     """
     from packaging.version import Version
 
@@ -323,7 +324,9 @@ def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fa
                     {
                         "rule_id": "GIT_DEPENDENCY",
                         "severity": "HIGH",
-                        "title": f"Git dependency bypasses PyPI review: {spec.git_url or spec.name}",
+                        "title": (
+                            f"Git dependency bypasses PyPI review: {spec.git_url or spec.name}"
+                        ),
                     }
                 ],
             }

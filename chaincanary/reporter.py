@@ -128,7 +128,8 @@ def _print_verdict_panel(report: RiskReport) -> None:
     elif report.should_warn:
         lines.append("")
         lines.append(
-            "  [yellow]⚠️  Proceeding with caution. Use [bold]--block[/bold] to enforce blocking.[/yellow]"
+            "  [yellow]⚠️  Proceeding with caution."
+            " Use [bold]--block[/bold] to enforce blocking.[/yellow]"
         )
 
     panel_content = "\n".join(lines)

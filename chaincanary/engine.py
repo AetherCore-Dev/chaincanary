@@ -49,7 +49,10 @@ class AnalysisEngine:
                 Finding(
                     rule_id="TYPOSQUATTING",
                     severity=Severity.HIGH if typo["likely_typosquat"] else Severity.MEDIUM,
-                    title=f"Package name resembles '{typo['target']}' (edit distance: {typo['distance']})",
+                    title=(
+                        f"Package name resembles '{typo['target']}' "
+                        f"(edit distance: {typo['distance']})"
+                    ),
                     description=(
                         f"'{package}' is suspiciously similar to the popular package "
                         f"'{typo['target']}' (similarity: {typo['similarity']:.0%}, "
@@ -125,7 +128,10 @@ class AnalysisEngine:
                             rule_id="SUSPICIOUS_NEW_FILES",
                             severity=Severity.HIGH,
                             title="Suspicious new files added in this version",
-                            description="Files with suspicious names were added compared to the previous version.",
+                            description=(
+                                "Files with suspicious names were added"
+                                " compared to the previous version."
+                            ),
                             evidence=f"New suspicious files: {file_diff['new_suspicious_files']}",
                             source="static",
                         )

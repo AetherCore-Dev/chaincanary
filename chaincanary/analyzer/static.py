@@ -624,7 +624,9 @@ class StaticAnalyzer:
                         Finding(
                             rule_id="DNS_EXFIL",
                             severity=Severity.HIGH,
-                            title="Potential DNS exfiltration — encodes data in DNS hostname lookup",
+                            title=(
+                                "Potential DNS exfiltration — encodes data in DNS hostname lookup"
+                            ),
                             description=(
                                 "DNS-based exfiltration encodes stolen data (env vars, secrets) "
                                 "as subdomains of an attacker-controlled domain. "
@@ -643,7 +645,9 @@ class StaticAnalyzer:
                         Finding(
                             rule_id="SYS_MODULES_ACCESS",
                             severity=Severity.MEDIUM,
-                            title="Indirect module access via sys.modules (bypasses static analysis)",
+                            title=(
+                                "Indirect module access via sys.modules (bypasses static analysis)"
+                            ),
                             description=(
                                 "Accessing modules via sys.modules[] is a technique to bypass "
                                 "import-based detection. Attackers use it to call network/exec "
