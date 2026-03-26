@@ -1,8 +1,8 @@
 name: 'chaincanary — Python Supply Chain Security Scanner'
 description: >
   Scan Python packages for supply chain attacks before they execute.
-  Detects malicious .pth files, network beacons, obfuscated code,
-  and other attack patterns (as seen in LiteLLM 1.82.7).
+  The only tool with .pth semantic analysis — catches attacks like LiteLLM 1.82.7
+  that every other scanner misses. No account. No data upload. Zero config.
 author: 'chaincanary contributors'
 
 branding:

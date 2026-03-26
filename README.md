@@ -2,13 +2,17 @@
 
 **Stop malicious Python packages before they execute.**
 
-> The only tool that detected LiteLLM 1.82.7 as MALICIOUS — before any advisory was published.
+> The only tool that detected LiteLLM 1.82.7 as **MALICIOUS** — before any advisory was published.  
 > No account. No GitHub App. Nothing leaves your machine.
 
-[![CI](https://github.com/allenenli/chaincanary/actions/workflows/ci.yml/badge.svg)](https://github.com/allenenli/chaincanary/actions)
+[![CI](https://github.com/AetherCore-Dev/chaincanary/actions/workflows/ci.yml/badge.svg)](https://github.com/AetherCore-Dev/chaincanary/actions)
 [![PyPI version](https://badge.fury.io/py/chaincanary.svg)](https://badge.fury.io/py/chaincanary)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
+[![Star History](https://img.shields.io/github/stars/AetherCore-Dev/chaincanary?style=social)](https://star-history.com/#AetherCore-Dev/chaincanary)
+
+<!-- GIF_PLACEHOLDER: replace the line below with your terminal demo GIF -->
+<!-- ![chaincanary demo](demo.gif) -->
 
 ---
 
@@ -25,9 +29,7 @@ subprocess.Popen(
 )
 ```
 
-This file runs **every time you start Python** — not just during `pip install`. It was downloaded ~95 million times per month. The package was flagged and removed, but not before significant exposure.
-
-chaincanary was built to catch this.
+This file runs **every time you start Python** — not just during `pip install`. It was downloaded ~95 million times per month. Every other scanner passed it clean. chaincanary flagged it **MALICIOUS**.
 
 ---
 
@@ -36,7 +38,7 @@ chaincanary was built to catch this.
 ```bash
 pip install chaincanary
 
-# Scan LiteLLM 1.82.7 (the compromised version)
+# Try the real attack
 chaincanary check litellm 1.82.7
 ```
 
@@ -46,7 +48,7 @@ chaincanary check litellm 1.82.7
 ╭────────────┬──────────────────────────────┬──────────────────────────────────────╮
 │ Severity   │ Rule                         │ Title                                │
 ├────────────┼──────────────────────────────┼──────────────────────────────────────┤
-│ CRITICAL   │ PTH_FILE_INSTALL             │ .pth file installs dangerous code... │
+│ CRITICAL   │ PTH_FILE_INSTALL             │ .pth file installs dangerous code    │
 │ CRITICAL   │ PTH_NETWORK_BEACON           │ phone-home on every Python startup   │
 │ CRITICAL   │ PTH_SUBPROCESS               │ subprocess on every Python startup   │
 ╰────────────┴──────────────────────────────┴──────────────────────────────────────╯
@@ -69,6 +71,33 @@ Requires Python 3.9+. No Docker. No root. Works on Linux, macOS, Windows.
 
 ---
 
+## GitHub Action — drop-in CI protection
+
+Add to any repo to block supply chain attacks on every push:
+
+```yaml
+# .github/workflows/security.yml
+name: Supply Chain Security
+
+on: [push, pull_request]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan dependencies for supply chain attacks
+        uses: AetherCore-Dev/chaincanary@v0.1.0
+        with:
+          requirements: requirements.txt
+          fail-on: MALICIOUS   # or HIGH_RISK for stricter mode
+```
+
+The action fails your build if any package matches a known attack pattern. Zero config required.
+
+---
+
 ## Usage
 
 ### Scan a single package
@@ -85,7 +114,6 @@ chaincanary audit requirements.txt
 chaincanary audit pyproject.toml
 ```
 
-Output:
 ```
 🔍 chaincanary audit — requirements.txt (42 packages)
 
@@ -97,7 +125,6 @@ Scanning packages... ███████████████████�
 │ litellm          │ 1.82.7  │ 10.0  │ MALICIOUS│
 │ suspicious-lib   │ 0.3.1   │  7.5  │ HIGH_RISK│
 │ requests         │ 2.28.0  │  0.0  │ SAFE     │
-│ ...              │ ...     │  0.0  │ SAFE     │
 ╰──────────────────┴─────────┴───────┴──────────╯
 
 ✗ 2 package(s) failed the audit.
@@ -113,7 +140,6 @@ chaincanary diff litellm 1.82.6 1.82.7
 Version diff: litellm 1.82.6 → 1.82.7
 
   Added files:  litellm_init.pth   ← NEW .pth file
-  Removed:      (none)
   [CRITICAL] New .pth file with network beacon
 ```
 
@@ -124,11 +150,7 @@ Version diff: litellm 1.82.6 → 1.82.7
 chaincanary install litellm==1.82.7
 ```
 
-### Recommended workflow
-
-Use `chaincanary install` for individual packages and `chaincanary audit` in CI.
-Aliasing `pip` to `chaincanary` is **not recommended** — it changes timing expectations
-(chaincanary downloads + scans before installing) and may break flags like `-e .` or `-r`.
+### Recommended CI workflow
 
 ```bash
 # Individual package — scan then install
@@ -150,38 +172,11 @@ chaincanary audit requirements.txt --json-output \
 
 ---
 
-## GitHub Action
+## Why chaincanary catches what others miss
 
-Add to any repo to block malicious packages on every push:
+A `.pth` file in Python's `site-packages` runs **on every Python startup**, not just at install time. No other scanner understands this distinction.
 
-```yaml
-# .github/workflows/security.yml
-name: Supply Chain Security
-
-on: [push, pull_request]
-
-jobs:
-  scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Scan dependencies for supply chain attacks
-        uses: allenenli/chaincanary@v0.1.0
-        with:
-          requirements: requirements.txt
-          fail-on: MALICIOUS   # or HIGH_RISK for stricter mode
-```
-
-That's it. The action will fail your build if any package matches a known attack pattern.
-
----
-
-## The .pth problem — and why every other tool missed it
-
-A `.pth` file in Python's `site-packages` runs **on every Python startup**, not just during `pip install`. No other scanner understands this distinction.
-
-chaincanary is the only tool with a **semantic `.pth` classifier** — it doesn't just flag `.pth` files blindly. It understands what they actually do:
+chaincanary is the only tool with a **semantic `.pth` classifier**:
 
 | .pth content | Classification | Finding |
 |---|---|---|
@@ -190,120 +185,95 @@ chaincanary is the only tool with a **semantic `.pth` classifier** — it doesn'
 | setuptools distutils shim | Safe code | ⚠ LOW |
 | `subprocess.Popen(['curl', ...])` | **Dangerous** | 🔴 CRITICAL |
 
-**This is why LiteLLM 1.82.7 was flagged as MALICIOUS while every other tool passed it clean.**
+**This is why LiteLLM 1.82.7 was flagged MALICIOUS while every other tool passed it clean.**
 
 ---
 
 ## What chaincanary detects
 
-### Beyond .pth — other attack vectors
-
 | What | Where | Severity |
 |---|---|---|
+| `.pth` file with network/subprocess | `site-packages/*.pth` | CRITICAL |
 | Network call during `pip install` | `setup.py` | HIGH |
 | Shell command during `pip install` | `setup.py` | HIGH |
 | `exec(base64.decode(...))` obfuscation | anywhere | HIGH |
+| DNS exfiltration via `socket.getaddrinfo` | `__init__.py` | HIGH |
 | Network call on every `import` | `__init__.py` | MEDIUM |
-| SSH / AWS credentials access | anywhere | HIGH |
+| SSH / AWS credential access | anywhere | HIGH |
 | Path traversal in wheel zip | `.whl` structure | CRITICAL |
 | Known malicious SHA256 hash | `.whl` file | CRITICAL |
+| Typosquatting (≤2 edits from top packages) | package name | MEDIUM |
 
-### What chaincanary does NOT do
+---
 
-- Does not install packages
-- Does not execute any package code
-- Does not require Docker or privileged access
-- Does not send package contents to any server
-- Does not replace `pip` — it scans before you decide to install
+## Comparison
+
+| | **chaincanary** | pip-audit | Trivy | socket.dev | Safety |
+|---|---|---|---|---|---|
+| `.pth` semantic analysis | ✅ **4-category** | ❌ | ❌ | ❌ | ❌ |
+| No account needed | ✅ | ✅ | ✅ | ❌ requires GitHub App | ❌ requires account |
+| Nothing leaves your machine | ✅ | ✅ | ✅ | ❌ uploads repo metadata | ✅ |
+| Offline capable | ✅ | partial | ✅ | ❌ | ❌ |
+| Open source | ✅ | ✅ | ✅ | ❌ SaaS | partial |
+
+> **chaincanary is the only tool that would have caught LiteLLM 1.82.7.**  
+> It is not a CVE scanner — use it alongside `pip-audit` for vulnerability advisory coverage.
 
 ---
 
 ## How it works
 
 ```
-pip install request      ← your intent
-      ↓
-chaincanary                 ← intercepts
-      ↓
+chaincanary check <package>
+        │
+        ▼
 Download wheel (no install, no execute)
-      ↓
+        │
+        ▼
 Static analysis:
-  - Zip safety (path traversal, zip bomb)
-  - .pth file semantic classifier
-  - AST analysis of setup.py / install hooks
-  - Obfuscation detection
-  - __init__.py delayed-trigger scan
-  - SHA256 hash database
-      ↓
+  · Zip safety (path traversal, zip bomb)
+  · .pth semantic classifier (4 categories)
+  · AST analysis of setup.py / install hooks
+  · Obfuscation detection (base64, eval, exec)
+  · __init__.py delayed-trigger scan
+  · DNS exfiltration patterns
+  · SHA256 malicious hash database
+  · Typosquatting distance check
+        │
+        ▼
 Score 0–10 → Verdict: SAFE / LOW_RISK / HIGH_RISK / MALICIOUS
-      ↓
+        │
+        ▼
 Block or proceed
 ```
 
-No sandboxing, no Docker, no kernel modules. Pure Python static analysis that runs in seconds.
-
----
-
-## Comparison
-
-| Tool | .pth semantic analysis | No account needed | Local-only (no data upload) | Offline capable | Open source |
-|---|---|---|---|---|---|
-| **chaincanary** | ✅ **4-category classifier** | ✅ | ✅ | ✅ | ✅ |
-| socket.dev | ❌ | ❌ requires GitHub App | ❌ uploads your repo | ❌ | ❌ SaaS |
-| pip-audit | ❌ | ✅ | ✅ | partial | ✅ |
-| Safety | ❌ | ❌ requires account | ✅ | ❌ | partial |
-| Trivy | ❌ | ✅ | ✅ | ✅ | ✅ |
-| Bandit | ❌ (SAST only) | ✅ | ✅ | ✅ | ✅ |
-
-> **chaincanary is the only tool with `.pth` semantic analysis.**
-> Every other tool would have passed LiteLLM 1.82.7 as clean.
-
----
-
-## Why not socket.dev?
-
-socket.dev is a great product — but it's built for a different threat model:
-
-| | chaincanary | socket.dev |
-|---|---|---|
-| Setup | `pip install chaincanary` | Install GitHub App + create account |
-| Data privacy | Nothing leaves your machine | Your repo metadata is sent to their servers |
-| `.pth` detection | ✅ Semantic 4-category classifier | ❌ Not detected |
-| Works offline | ✅ | ❌ |
-| Cost | Free, open source | Paid (beyond free tier) |
-| Use case | Pre-install scan, CI audit | Continuous repo monitoring |
-
-**The bottom line:** socket.dev would have passed LiteLLM 1.82.7 as clean.
-chaincanary catches the `.pth` pattern — because it's the only tool that understands what `.pth` files do.
-
-> chaincanary is **not** a CVE scanner — use it alongside `pip-audit` or `Safety` for advisory DB coverage.
-> It's a **behavioral scanner**: it looks at what a package *does*, not just whether it appears on a known-bad list.
+No sandboxing. No Docker. No kernel modules. Pure Python static analysis in seconds.
 
 ---
 
 ## Known Limitations
 
-chaincanary is a **static behavioral scanner**, not a magic bullet. Know its blind spots:
+chaincanary is a **static behavioral scanner**, not a magic bullet:
 
-| Gap | What it means | Workaround |
-|-----|---------------|------------|
-| No C extension analysis | Malicious `.so`/`.pyd` files aren't scanned | Sandbox (v0.3) |
-| No CVE database | Won't catch known vulnerabilities | Use alongside `pip-audit` |
-| No dynamic sandbox | Side-effects on `import` not executed | Static signals only (for now) |
-| Multi-stage payloads | Pkg that downloads payload at runtime looks clean | Network monitoring (v0.3) |
-| Private registries | Can't download from non-public PyPI mirrors | `--offline` flag (v0.2) |
+| Gap | Mitigation |
+|-----|------------|
+| No C extension analysis (`.so`/`.pyd`) | Sandbox mode in v0.3 |
+| No CVE database | Use alongside `pip-audit` |
+| No dynamic sandbox | Static signals only (for now) |
+| Multi-stage payloads (download at runtime) | Runtime monitoring in v0.3 |
+| Private PyPI registries | `--offline` flag in v0.2 |
 
-→ Full limitation table: [ROADMAP.md#known-limitations](ROADMAP.md)
+→ Full details: [ROADMAP.md#known-limitations](ROADMAP.md)
 
 ---
 
 ## Roadmap
 
-| Version | Theme | ETA |
-|---------|-------|-----|
-| **post-0.1** | Scoring fixes, DNS exfil, typosquatting, git deps | ✅ done |
-| **v0.2** | Hash feed, SARIF output, `--timeout`, pre-commit hook | soon |
-| **v0.3** | Lightweight sandbox, package reputation, npm/cargo | later |
+| Version | Theme | Status |
+|---------|-------|--------|
+| **v0.1** | Core engine: `.pth` classifier, audit, diff, GitHub Action | ✅ shipped |
+| **v0.2** | Hash feed, SARIF output, pre-commit hook, `--offline` | 🔧 planned |
+| **v0.3** | Lightweight sandbox, package reputation, npm/cargo | 🔭 later |
 
 → Full plan: [ROADMAP.md](ROADMAP.md)
 
@@ -312,7 +282,7 @@ chaincanary is a **static behavioral scanner**, not a magic bullet. Know its bli
 ## Contributing
 
 ```bash
-git clone https://github.com/allenenli/chaincanary
+git clone https://github.com/AetherCore-Dev/chaincanary
 cd chaincanary
 pip install -e ".[dev]"
 pytest tests/
@@ -320,8 +290,14 @@ pytest tests/
 
 PRs welcome — especially:
 - New malicious hash signatures
-- Detection rules for new attack patterns  
-- False positive reports (real packages that chaincanary misflags)
+- Detection rules for new attack patterns
+- False positive reports
+
+---
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=AetherCore-Dev/chaincanary&type=Date)](https://star-history.com/#AetherCore-Dev/chaincanary)
 
 ---
 
