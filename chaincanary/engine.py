@@ -35,6 +35,7 @@ class AnalysisEngine:
         package: str,
         version: str,
         on_progress=None,
+        local_wheel: Path | None = None,
     ) -> RiskReport:
         report = RiskReport(package=package, version=version)
 
@@ -69,9 +70,16 @@ class AnalysisEngine:
         with tempfile.TemporaryDirectory(prefix="chaincanary_") as tmpdir:
             tmp_path = Path(tmpdir)
 
-            # ── Step 1: Download ─────────────────────────────────────
-            progress("Downloading package...")
-            wheel_path = download_wheel(package, version, tmp_path)
+            # ── Step 1: Download (or use local wheel) ────────────────
+            if local_wheel:
+                import shutil
+                progress("Using local wheel file...")
+                dest = tmp_path / local_wheel.name
+                shutil.copy2(local_wheel, dest)
+                wheel_path = dest
+            else:
+                progress("Downloading package...")
+                wheel_path = download_wheel(package, version, tmp_path)
             if not wheel_path:
                 report.findings.append(
                     Finding(
@@ -91,52 +99,53 @@ class AnalysisEngine:
             report.findings.extend(static_findings)
             report.calculate_score()
 
-            # ── Step 3: Version Diff (fast, always run) ──────────────
-            progress("Comparing with previous version...")
-            curr_files = self.static.get_wheel_filelist(wheel_path)
-            prev_wheel = self._get_prev_version_wheel(package, version, tmp_path)
-            if prev_wheel:
-                prev_files = self.static.get_wheel_filelist(prev_wheel)
-                file_diff = diff_from_static(prev_files, curr_files)
-                report.behavior_diff = file_diff
+            # ── Step 3: Version Diff (skip if local-only) ────────────
+            if not local_wheel:
+                progress("Comparing with previous version...")
+                curr_files = self.static.get_wheel_filelist(wheel_path)
+                prev_wheel = self._get_prev_version_wheel(package, version, tmp_path)
+                if prev_wheel:
+                    prev_files = self.static.get_wheel_filelist(prev_wheel)
+                    file_diff = diff_from_static(prev_files, curr_files)
+                    report.behavior_diff = file_diff
 
-                if file_diff.get("new_pth_files"):
-                    already_reported = any(f.rule_id == "PTH_FILE_INSTALL" for f in report.findings)
-                    if not already_reported:
+                    if file_diff.get("new_pth_files"):
+                        already_reported = any(f.rule_id == "PTH_FILE_INSTALL" for f in report.findings)
+                        if not already_reported:
+                            report.findings.append(
+                                Finding(
+                                    rule_id="PTH_FILE_NEW_IN_VERSION",
+                                    severity=Severity.CRITICAL,
+                                    title=".pth file ADDED in this version (not in previous)",
+                                    description=(
+                                        "This version introduced a new .pth file that "
+                                        "was NOT present in the previous version. "
+                                        "This is the exact attack vector used in LiteLLM 1.82.7."
+                                    ),
+                                    evidence=(
+                                        f"New files: {file_diff['new_pth_files']}\n"
+                                        f"Previous version did not contain these files."
+                                    ),
+                                    source="static",
+                                )
+                            )
+                            report.calculate_score()
+
+                    if file_diff.get("new_suspicious_files"):
                         report.findings.append(
                             Finding(
-                                rule_id="PTH_FILE_NEW_IN_VERSION",
-                                severity=Severity.CRITICAL,
-                                title=".pth file ADDED in this version (not in previous)",
+                                rule_id="SUSPICIOUS_NEW_FILES",
+                                severity=Severity.HIGH,
+                                title="Suspicious new files added in this version",
                                 description=(
-                                    "This version introduced a new .pth file that "
-                                    "was NOT present in the previous version. "
-                                    "This is the exact attack vector used in LiteLLM 1.82.7."
+                                    "Files with suspicious names were added"
+                                    " compared to the previous version."
                                 ),
-                                evidence=(
-                                    f"New files: {file_diff['new_pth_files']}\n"
-                                    f"Previous version did not contain these files."
-                                ),
+                                evidence=f"New suspicious files: {file_diff['new_suspicious_files']}",
                                 source="static",
                             )
                         )
                         report.calculate_score()
-
-                if file_diff.get("new_suspicious_files"):
-                    report.findings.append(
-                        Finding(
-                            rule_id="SUSPICIOUS_NEW_FILES",
-                            severity=Severity.HIGH,
-                            title="Suspicious new files added in this version",
-                            description=(
-                                "Files with suspicious names were added"
-                                " compared to the previous version."
-                            ),
-                            evidence=f"New suspicious files: {file_diff['new_suspicious_files']}",
-                            source="static",
-                        )
-                    )
-                    report.calculate_score()
 
             # ── Step 4: Dynamic Analysis ─────────────────────────────
             if not self.skip_dynamic and report.score > 0:
@@ -150,7 +159,7 @@ class AnalysisEngine:
                 report.calculate_score()
 
             # ── Step 5: Safe version lookup + validation ─────────────
-            if report.verdict in ("HIGH_RISK", "MALICIOUS"):
+            if report.verdict in ("HIGH_RISK", "MALICIOUS") and not local_wheel:
                 progress("Finding and validating safe version...")
                 report.safe_version = self._find_validated_safe_version(package, version, tmp_path)
 

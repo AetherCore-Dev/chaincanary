@@ -3,7 +3,7 @@
 chaincanary-demo-scan.py
 
 Scan the local litellm-1.82.8 mock wheel and display results,
-exactly as if you ran: chaincanary check litellm 1.82.8
+exactly as if you ran: chaincanary check litellm==1.82.8
 
 Usage (from repo root):
     python3 chaincanary-demo-scan.py
@@ -45,9 +45,21 @@ def _local_download(package, version, target_dir=None, verify_hash=True):  # noq
     return dest
 
 
+# monkey-patch version listing so safe-version lookup works offline
+def _local_get_all_versions(package):
+    return ["1.82.0", "1.82.2", "1.82.4", "1.82.6", "1.82.7", "1.82.8"]
+
+
+def _local_get_latest_safe(package, current):
+    return "1.82.6"
+
+
 # patch both the module and the engine's local reference
 _dl.download_wheel = _local_download
+_dl.get_all_versions = _local_get_all_versions
+_dl.get_latest_safe_version = _local_get_latest_safe
 _engine.download_wheel = _local_download
+_engine.get_latest_safe_version = _local_get_latest_safe
 
 # ── run the scan ──
 engine = AnalysisEngine()

@@ -12,7 +12,7 @@
 [![Star History](https://img.shields.io/github/stars/AetherCore-Dev/chaincanary?style=social)](https://star-history.com/#AetherCore-Dev/chaincanary)
 
 <!-- GIF_PLACEHOLDER: replace the line below with your terminal demo GIF -->
-<!-- ![chaincanary demo](demo.gif) -->
+![chaincanary demo](demo.gif)
 
 ---
 
@@ -109,8 +109,11 @@ The action fails your build if any package matches a known attack pattern. Zero 
 ### Scan a single package
 
 ```bash
-chaincanary check requests 2.28.0
+chaincanary check requests==2.28.0
 chaincanary check litellm latest
+
+# Scan a local .whl file (no network needed)
+chaincanary check litellm==1.82.8 --local ./litellm-1.82.8-py3-none-any.whl
 ```
 
 ### Audit your entire project

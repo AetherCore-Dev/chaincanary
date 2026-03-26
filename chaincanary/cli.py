@@ -67,16 +67,18 @@ def _run_analysis(
     skip_dynamic: bool = False,
     verbose: bool = False,
     quiet: bool = False,  # suppress spinner (e.g., JSON mode or batch)
+    local_wheel: str | None = None,
 ):
     """Run full analysis with live progress display."""
     if not quiet:
         reporter.print_scanning(package, version)
 
     engine = AnalysisEngine(skip_dynamic=skip_dynamic, verbose=verbose)
+    local_path = Path(local_wheel) if local_wheel else None
 
     if quiet or not console.is_terminal:
         # JSON / piped output — no spinner, no color pollution
-        report = engine.analyze(package, version)
+        report = engine.analyze(package, version, local_wheel=local_path)
     else:
         status_text = Text("Starting...", style="dim")
         with Live(
@@ -89,7 +91,7 @@ def _run_analysis(
             def on_progress(msg: str):
                 status_text.plain = f"  {msg}"
 
-            report = engine.analyze(package, version, on_progress=on_progress)
+            report = engine.analyze(package, version, on_progress=on_progress, local_wheel=local_path)
 
     return report
 
@@ -117,7 +119,12 @@ def main():
 )
 @click.option("--verbose", "-v", is_flag=True, help="Show detailed evidence for each finding")
 @click.option("--json-output", "-j", is_flag=True, help="Output as JSON (for CI/CD)")
-def check(package_spec: str, skip_dynamic: bool, verbose: bool, json_output: bool):
+@click.option(
+    "--local", "-l", "local_wheel",
+    type=click.Path(exists=True),
+    help="Scan a local .whl file instead of downloading from PyPI",
+)
+def check(package_spec: str, skip_dynamic: bool, verbose: bool, json_output: bool, local_wheel: str | None):
     """
     Check a package for security issues WITHOUT installing it.
 
@@ -126,12 +133,20 @@ def check(package_spec: str, skip_dynamic: bool, verbose: bool, json_output: boo
         chaincanary check litellm==1.82.7
         chaincanary check litellm==1.82.7 --verbose
         chaincanary check requests --json-output
+        chaincanary check litellm==1.82.8 --local ./litellm-1.82.8-py3-none-any.whl
     """
     package, version = _parse_package_spec(package_spec)
-    version = _resolve_version(package, version)
+    if not local_wheel:
+        version = _resolve_version(package, version)
+    elif not version:
+        # Extract version from wheel filename if not provided
+        whl_name = Path(local_wheel).stem
+        parts = whl_name.split("-")
+        version = parts[1] if len(parts) >= 2 else "unknown"
 
     report = _run_analysis(
-        package, version, skip_dynamic=skip_dynamic, verbose=verbose, quiet=json_output
+        package, version, skip_dynamic=skip_dynamic, verbose=verbose, quiet=json_output,
+        local_wheel=local_wheel,
     )
 
     if json_output:

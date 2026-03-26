@@ -5,7 +5,7 @@
 #   brew install vhs
 #   brew install ttyd  # VHS dependency on Mac
 #   cd chaincanary/
-#   pip install chaincanary  # or: pip install -e .
+#   pip install -e .   # or: pip install chaincanary
 #
 # Run:
 #   vhs chaincanary-demo.tape
@@ -15,31 +15,55 @@ Output demo.gif
 
 Set Shell "bash"
 Set FontSize 14
-Set Width 900
-Set Height 520
+Set Width 1100
+Set Height 650
 Set Theme "Dracula"
-Set TypingSpeed 50ms
+Set TypingSpeed 35ms
 Set Padding 20
+Set WindowBar Colorful
+Set WindowBarSize 40
+Set LoopOffset 70%
+Set CursorBlink false
 
-# ── Scene 1: headline ──
-Type "# LiteLLM 1.82.8 was a supply chain attack — let's scan it"
-Sleep 800ms
+# ── Setup: activate venv + clean prompt ──
+Hide
+Type "cd /Users/allenenli/Documents/chaincanary && source .venv/bin/activate && export PS1='$ '"
+Enter
+Sleep 2000ms
+Type "clear"
 Enter
 Sleep 500ms
-Enter
+Show
 
-# ── Scene 2: scan the mock wheel (instant, no network) ──
-Type "python3 chaincanary-demo-scan.py"
-Sleep 700ms
+# ── Scene 1: Context — what happened ──
+
+Type "# LiteLLM 1.82.8 was a supply-chain attack (March 2026)"
+Sleep 500ms
 Enter
+Type "# A hidden .pth file exfiltrated SSH keys, AWS creds & crypto wallets"
+Sleep 500ms
+Enter
+Type "# Let's scan it with chaincanary..."
+Sleep 500ms
+Enter
+Sleep 1000ms
+
+# ── Scene 2: Run the real CLI command ──
+
+Type "chaincanary check litellm==1.82.8 --local tests/fixtures/litellm-1.82.8-py3-none-any.whl"
+Sleep 400ms
+Enter
+Sleep 4500ms
+
+# ── Scene 3: Let the viewer read the MALICIOUS verdict ──
 Sleep 6000ms
 
-# pause so viewer can read the MALICIOUS verdict
-Sleep 3000ms
-
-# ── Scene 3: what would safe rollback look like? ──
+# ── Scene 4: Safe rollback ──
 Enter
-Type "# Safe version: pip install litellm==1.82.6"
-Sleep 1000ms
+Type "# Blocked! Safe rollback:"
+Sleep 300ms
 Enter
-Sleep 1000ms
+Type "# pip install litellm==1.82.6"
+Sleep 600ms
+Enter
+Sleep 3500ms
