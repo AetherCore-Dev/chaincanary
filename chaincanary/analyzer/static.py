@@ -18,6 +18,7 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from chaincanary.analyzer.ast_deep import analyze_ast_obfuscation
 from chaincanary.analyzer.pth_analyzer import (
     analyze_pth_content,
     pth_severity_from_analysis,
@@ -665,10 +666,6 @@ class StaticAnalyzer:
             # ── AST deep obfuscation scan ───────────────────────────
             # Complements regex: catches string concat, chr() encoding,
             # indirect imports, encoded exec, etc.
-            from chaincanary.analyzer.ast_deep import (
-                analyze_ast_obfuscation,
-            )
-
             ast_findings = analyze_ast_obfuscation(code, py_file)
             findings.extend(ast_findings)
 

@@ -18,7 +18,6 @@ from chaincanary.sarif import (
     reports_to_sarif,
 )
 
-
 # ── Helpers ──────────────────────────────────────────────────────────
 
 

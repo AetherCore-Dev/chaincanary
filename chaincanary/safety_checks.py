@@ -240,6 +240,12 @@ def check_git_dependency(raw_dep: str) -> bool:
     return raw_dep.strip().startswith(("git+", "-e git+", "git://"))
 
 
+# Pre-computed normalized popular package names for O(1) lookups
+_POPULAR_NORMALIZED: frozenset[str] = frozenset(
+    _norm(p).replace("_", "-") for p in _POPULAR_PACKAGES
+)
+
+
 # ─────────────────────────────────────────────────────────────────
 # Dependency confusion detection
 # ─────────────────────────────────────────────────────────────────
@@ -273,9 +279,7 @@ def is_internal_name_pattern(package_name: str) -> bool:
     name = norm.replace("_", "-")
 
     # Known public → never flag
-    if package_name.lower().replace("_", "-") in {
-        _norm(p).replace("_", "-") for p in _POPULAR_PACKAGES
-    }:
+    if package_name.lower().replace("_", "-") in _POPULAR_NORMALIZED:
         return False
 
     # Check prefixes
@@ -335,15 +339,14 @@ def check_dependency_confusion(
         }
 
     # ── Heuristic: name looks like an internal package ───────────
-    if not norm_internals or norm_input not in norm_internals:
-        if is_internal_name_pattern(package_name):
-            return {
-                "risk": "DEPENDENCY_CONFUSION_HEURISTIC",
-                "package": package_name,
-                "reason": (
-                    "Package name matches common internal naming "
-                    "patterns (prefix/suffix/multi-segment org name)"
-                ),
-            }
+    if is_internal_name_pattern(package_name):
+        return {
+            "risk": "DEPENDENCY_CONFUSION_HEURISTIC",
+            "package": package_name,
+            "reason": (
+                "Package name matches common internal naming "
+                "patterns (prefix/suffix/multi-segment org name)"
+            ),
+        }
 
     return None

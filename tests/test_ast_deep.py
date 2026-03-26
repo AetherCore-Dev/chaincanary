@@ -8,11 +8,8 @@ encoded exec, compile+exec, deep nesting, and __builtins__ access.
 
 from __future__ import annotations
 
-import pytest
-
 from chaincanary.analyzer.ast_deep import analyze_ast_obfuscation
 from chaincanary.models import Severity
-
 
 # ── Pattern 1: String concatenation in dangerous sinks ───────────
 
@@ -258,10 +255,10 @@ class TestEdgeCases:
         )
         # __init__.py findings should be at least as severe
         if init_findings and other_findings:
-            init_sev = max(
+            max(
                 f.severity.value for f in init_findings
             )
-            other_sev = max(
+            max(
                 f.severity.value for f in other_findings
             )
             # Both should detect it; __init__ may have higher severity

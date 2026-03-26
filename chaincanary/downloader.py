@@ -6,6 +6,7 @@ Includes retry logic, timeout handling, and cache-safe download.
 from __future__ import annotations
 
 import hashlib
+import re
 import tempfile
 from pathlib import Path
 
@@ -44,6 +45,9 @@ def _verify_hash(path: Path, expected_sha256: str) -> bool:
         for chunk in iter(lambda: f.read(65536), b""):
             h.update(chunk)
     return h.hexdigest() == expected_sha256
+
+
+MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024  # 200 MB hard cap
 
 
 DEFAULT_TIMEOUT = 30
@@ -86,9 +90,16 @@ def download_wheel(
         return None
 
     artifact = candidates[0]
-    filename = artifact["filename"]
+    raw_filename = artifact["filename"]
     url = artifact["url"]
     expected_sha256 = artifact.get("digests", {}).get("sha256", "")
+
+    # Sanitize filename — prevent path traversal from untrusted PyPI data
+    filename = Path(raw_filename).name
+    if not re.match(
+        r"^[A-Za-z0-9_.\-]+\.(whl|tar\.gz|zip)$", filename,
+    ):
+        return None  # Unsafe or unexpected filename
 
     if target_dir is None:
         target_dir = Path(tempfile.mkdtemp(prefix="chaincanary_"))
@@ -99,8 +110,14 @@ def download_wheel(
     try:
         file_resp = session.get(url, stream=True, timeout=timeout)
         file_resp.raise_for_status()
+        total_bytes = 0
         with open(dest, "wb") as f:
             for chunk in file_resp.iter_content(chunk_size=65536):
+                total_bytes += len(chunk)
+                if total_bytes > MAX_DOWNLOAD_BYTES:
+                    f.close()
+                    dest.unlink()
+                    return None  # File too large
                 f.write(chunk)
     except Exception:
         if dest.exists():
@@ -108,7 +125,12 @@ def download_wheel(
         return None
 
     # Verify integrity
-    if verify_hash and expected_sha256:
+    if verify_hash:
+        if not expected_sha256:
+            # No hash provided — refuse to trust unverified file
+            if dest.exists():
+                dest.unlink()
+            return None
         if not _verify_hash(dest, expected_sha256):
             dest.unlink()
             return None  # Hash mismatch — don't trust it

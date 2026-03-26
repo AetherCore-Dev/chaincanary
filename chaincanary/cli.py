@@ -143,8 +143,9 @@ def main():
     help="No network calls. Requires --local for check.",
 )
 @click.option(
-    "--timeout", type=int, default=30, show_default=True,
-    help="Per-request timeout in seconds for PyPI downloads.",
+    "--timeout", type=click.IntRange(min=1, max=300),
+    default=30, show_default=True,
+    help="Per-request timeout in seconds (1–300).",
 )
 @click.option(
     "--internal-names", default="",
@@ -257,8 +258,9 @@ def check(
 )
 @click.option("--json-output", "-j", is_flag=True, help="Output results as JSON")
 @click.option(
-    "--timeout", type=int, default=30, show_default=True,
-    help="Per-request timeout in seconds for PyPI downloads.",
+    "--timeout", type=click.IntRange(min=1, max=300),
+    default=30, show_default=True,
+    help="Per-request timeout in seconds (1–300).",
 )
 def install(
     package_spec: str,
@@ -367,8 +369,9 @@ def install(
     help="Directory containing .whl files for offline scanning.",
 )
 @click.option(
-    "--timeout", type=int, default=30, show_default=True,
-    help="Per-request timeout in seconds for PyPI downloads.",
+    "--timeout", type=click.IntRange(min=1, max=300),
+    default=30, show_default=True,
+    help="Per-request timeout in seconds (1–300).",
 )
 @click.option(
     "--skip", "skip_packages", default="",
@@ -452,7 +455,7 @@ def audit(
             f"--workers {workers} capped to 16 to avoid PyPI rate-limits."
         )
 
-    lock_path = Path(lockfile) if lockfile != "requirements.txt" else Path(lockfile)
+    lock_path = Path(lockfile)
     if not lock_path.exists():
         # Try auto-detect
         detected = detect_lockfile(Path("."))

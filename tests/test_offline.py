@@ -14,13 +14,11 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 from click.testing import CliRunner
 
 from chaincanary.cli import main
 from chaincanary.engine import AnalysisEngine
 from chaincanary.models import RiskReport
-
 
 # ── Helpers ──────────────────────────────────────────────────────────
 

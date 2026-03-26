@@ -6,17 +6,13 @@ TDD RED phase: These tests define the expected behavior before implementation.
 
 from __future__ import annotations
 
-import time
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from click.testing import CliRunner
 
 from chaincanary.cli import main
 from chaincanary.downloader import download_wheel, get_all_versions, get_latest_safe_version
 from chaincanary.engine import AnalysisEngine
-
 
 # ── Downloader: timeout parameter acceptance ─────────────────────────
 

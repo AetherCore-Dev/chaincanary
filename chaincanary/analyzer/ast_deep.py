@@ -61,6 +61,16 @@ def analyze_ast_obfuscation(
     if not code or not code.strip():
         return []
 
+    # Guard against pathologically large files
+    if len(code) > 2 * 1024 * 1024:  # 2 MB
+        return [Finding(
+            rule_id="AST_FILE_TOO_LARGE",
+            severity=Severity.MEDIUM,
+            title=f"File too large for AST analysis ({len(code) // 1024} KB)",
+            description="Skipped AST deep scan due to file size.",
+            source="static",
+        )]
+
     try:
         tree = ast.parse(code, filename=filename)
     except SyntaxError:
@@ -68,7 +78,21 @@ def analyze_ast_obfuscation(
 
     is_init = filename.endswith("__init__.py")
     visitor = _ObfuscationVisitor(filename=filename, is_init=is_init)
-    visitor.visit(tree)
+
+    try:
+        visitor.visit(tree)
+    except RecursionError:
+        return [Finding(
+            rule_id="AST_EXCESSIVE_NESTING",
+            severity=Severity.HIGH,
+            title="AST analysis aborted: pathologically deep nesting",
+            description=(
+                "File AST exceeded recursion limit — "
+                "likely obfuscation or malformed code."
+            ),
+            source="static",
+        )]
+
     return visitor.findings
 
 
@@ -79,6 +103,7 @@ class _ObfuscationVisitor(ast.NodeVisitor):
         self.filename = filename
         self.is_init = is_init
         self.findings: list[Finding] = []
+        self._builtins_flagged_nodes: set[int] = set()  # deduplicate
 
     # ── Pattern dispatch: Call nodes ─────────────────────────────
 
@@ -170,6 +195,7 @@ class _ObfuscationVisitor(ast.NodeVisitor):
 
         # Variable (non-literal) attr → suspicious
         if not isinstance(attr_arg, ast.Constant):
+            self._builtins_flagged_nodes.add(id(node))
             self._add_finding(
                 rule_id="AST_INDIRECT_IMPORT",
                 severity=Severity.CRITICAL,
@@ -185,6 +211,7 @@ class _ObfuscationVisitor(ast.NodeVisitor):
         # String concat in attr → suspicious
         if _is_string_concat(attr_arg):
             resolved = _resolve_concat(attr_arg)
+            self._builtins_flagged_nodes.add(id(node))
             self._add_finding(
                 rule_id="AST_INDIRECT_IMPORT",
                 severity=Severity.CRITICAL,
@@ -270,6 +297,9 @@ class _ObfuscationVisitor(ast.NodeVisitor):
         self, node: ast.Call, name: str,
     ) -> None:
         if name != "getattr" or len(node.args) < 2:
+            return
+        # Skip if already flagged by _check_indirect_import
+        if id(node) in self._builtins_flagged_nodes:
             return
         target_name = _node_name(node.args[0])
         if target_name in ("__builtins__", "__builtin__"):

@@ -15,16 +15,13 @@ Detection strategy:
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from chaincanary.models import Severity
 from chaincanary.safety_checks import (
     check_dependency_confusion,
     is_internal_name_pattern,
 )
-
 
 # ── Heuristic internal name detection ────────────────────────────
 
@@ -139,6 +136,7 @@ class TestAuditInternalNames:
     def test_audit_accepts_internal_names(self):
         """--internal-names should be valid for audit."""
         from click.testing import CliRunner
+
         from chaincanary.cli import main
 
         runner = CliRunner()
@@ -151,6 +149,7 @@ class TestAuditInternalNames:
     def test_check_accepts_internal_names(self):
         """--internal-names should also work for check."""
         from click.testing import CliRunner
+
         from chaincanary.cli import main
 
         runner = CliRunner()
