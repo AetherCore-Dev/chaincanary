@@ -12,7 +12,11 @@ from rich.console import Console
 from chaincanary.analyzer.differ import diff_from_static
 from chaincanary.analyzer.dynamic import DynamicAnalyzer
 from chaincanary.analyzer.static import StaticAnalyzer
-from chaincanary.downloader import download_wheel, get_latest_safe_version
+from chaincanary.downloader import (
+    DEFAULT_TIMEOUT,
+    download_wheel,
+    get_latest_safe_version,
+)
 from chaincanary.models import Finding, RiskReport, Severity
 from chaincanary.safety_checks import check_typosquatting
 
@@ -25,10 +29,12 @@ class AnalysisEngine:
         skip_dynamic: bool = False,
         verbose: bool = False,
         offline: bool = False,
+        timeout: int = DEFAULT_TIMEOUT,
     ):
         self.skip_dynamic = skip_dynamic
         self.verbose = verbose
         self.offline = offline
+        self.timeout = timeout
         self.static = StaticAnalyzer()
         self.dynamic = DynamicAnalyzer()
 
@@ -100,7 +106,7 @@ class AnalysisEngine:
                 return report
             else:
                 progress("Downloading package...")
-                wheel_path = download_wheel(package, version, tmp_path)
+                wheel_path = download_wheel(package, version, tmp_path, timeout=self.timeout)
             if not wheel_path:
                 report.findings.append(
                     Finding(
@@ -209,7 +215,7 @@ class AnalysisEngine:
         from chaincanary.downloader import get_all_versions
 
         try:
-            all_versions = get_all_versions(package)
+            all_versions = get_all_versions(package, timeout=self.timeout)
             current = Version(current_version)
             candidates = sorted(
                 [
@@ -228,7 +234,7 @@ class AnalysisEngine:
             try:
                 cand_dir = tmp_path / f"safe_candidate_{v_str}"
                 cand_dir.mkdir(exist_ok=True)
-                whl = download_wheel(package, v_str, cand_dir)
+                whl = download_wheel(package, v_str, cand_dir, timeout=self.timeout)
                 if not whl:
                     continue
                 findings = self.static.analyze_wheel(whl, package)
@@ -250,12 +256,12 @@ class AnalysisEngine:
         current_version: str,
         tmp_path: Path,
     ) -> Path | None:
-        prev_version = get_latest_safe_version(package, current_version)
+        prev_version = get_latest_safe_version(package, current_version, timeout=self.timeout)
         if not prev_version:
             return None
         try:
             prev_dir = tmp_path / "prev"
             prev_dir.mkdir(exist_ok=True)
-            return download_wheel(package, prev_version, prev_dir)
+            return download_wheel(package, prev_version, prev_dir, timeout=self.timeout)
         except Exception:
             return None

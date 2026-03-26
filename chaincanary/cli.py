@@ -70,13 +70,14 @@ def _run_analysis(
     quiet: bool = False,  # suppress spinner (e.g., JSON mode or batch)
     local_wheel: str | None = None,
     offline: bool = False,
+    timeout: int = 30,
 ):
     """Run full analysis with live progress display."""
     if not quiet:
         reporter.print_scanning(package, version)
 
     engine = AnalysisEngine(
-        skip_dynamic=skip_dynamic, verbose=verbose, offline=offline,
+        skip_dynamic=skip_dynamic, verbose=verbose, offline=offline, timeout=timeout,
     )
     local_path = Path(local_wheel) if local_wheel else None
 
@@ -95,7 +96,9 @@ def _run_analysis(
             def on_progress(msg: str):
                 status_text.plain = f"  {msg}"
 
-            report = engine.analyze(package, version, on_progress=on_progress, local_wheel=local_path)
+            report = engine.analyze(
+                package, version, on_progress=on_progress, local_wheel=local_path,
+            )
 
     return report
 
@@ -136,6 +139,10 @@ def main():
     "--offline", is_flag=True,
     help="No network calls. Requires --local for check.",
 )
+@click.option(
+    "--timeout", type=int, default=30, show_default=True,
+    help="Per-request timeout in seconds for PyPI downloads.",
+)
 def check(
     package_spec: str,
     skip_dynamic: bool,
@@ -144,6 +151,7 @@ def check(
     local_wheel: str | None,
     sarif_output: bool,
     offline: bool,
+    timeout: int,
 ):
     """
     Check a package for security issues WITHOUT installing it.
@@ -177,6 +185,7 @@ def check(
         quiet=json_output or sarif_output,
         local_wheel=local_wheel,
         offline=offline,
+        timeout=timeout,
     )
 
     if sarif_output:
@@ -228,6 +237,10 @@ def check(
     help="Minimum verdict to block installation (default: MALICIOUS)",
 )
 @click.option("--json-output", "-j", is_flag=True, help="Output results as JSON")
+@click.option(
+    "--timeout", type=int, default=30, show_default=True,
+    help="Per-request timeout in seconds for PyPI downloads.",
+)
 def install(
     package_spec: str,
     skip_dynamic: bool,
@@ -235,6 +248,7 @@ def install(
     force: bool,
     block_on: str,
     json_output: bool,
+    timeout: int,
 ):
     """
     Analyze a package and install it if safe.
@@ -248,7 +262,10 @@ def install(
     package, version = _parse_package_spec(package_spec)
     version = _resolve_version(package, version)
 
-    report = _run_analysis(package, version, skip_dynamic=skip_dynamic, verbose=verbose)
+    report = _run_analysis(
+        package, version, skip_dynamic=skip_dynamic,
+        verbose=verbose, timeout=timeout,
+    )
 
     if json_output:
         output = {
@@ -330,6 +347,17 @@ def install(
     type=click.Path(exists=True, file_okay=False),
     help="Directory containing .whl files for offline scanning.",
 )
+@click.option(
+    "--timeout", type=int, default=30, show_default=True,
+    help="Per-request timeout in seconds for PyPI downloads.",
+)
+@click.option(
+    "--skip", "skip_packages", default="",
+    help=(
+        "Comma-separated package names to skip "
+        "(e.g., --skip torch,tensorflow)."
+    ),
+)
 def audit(
     lockfile: str,
     skip_dynamic: bool,
@@ -339,6 +367,8 @@ def audit(
     fail_on: str,
     offline: bool,
     wheel_dir: str | None,
+    timeout: int,
+    skip_packages: str,
 ):
     """
     Audit all packages in a lockfile / requirements file.
@@ -411,6 +441,27 @@ def audit(
         reporter.print_error(f"No packages found in {lock_path}")
         sys.exit(1)
 
+    # ── Apply --skip filter ──────────────────────────────────────────
+    skip_set = {
+        s.strip().lower()
+        for s in skip_packages.split(",")
+        if s.strip()
+    }
+    skipped_names: list[str] = []
+    if skip_set:
+        filtered = []
+        for spec in specs:
+            if spec.name.lower() in skip_set:
+                skipped_names.append(spec.name)
+            else:
+                filtered.append(spec)
+        specs = filtered
+        if not structured and skipped_names:
+            out.print(
+                f"[dim]Skipped {len(skipped_names)} package(s): "
+                f"{', '.join(skipped_names)}[/dim]"
+            )
+
     if not structured:
         out.print(
             f"\n[bold cyan]🔍 chaincanary audit[/bold cyan]"
@@ -419,7 +470,7 @@ def audit(
 
     results = []
     engine = AnalysisEngine(
-        skip_dynamic=skip_dynamic, offline=offline,
+        skip_dynamic=skip_dynamic, offline=offline, timeout=timeout,
     )
 
     def scan_one(spec):
@@ -536,15 +587,22 @@ def audit(
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
             TaskProgressColumn(),
+            TextColumn("[dim]{task.fields[current]}[/dim]"),
             console=console,
         ) as progress:
-            task = progress.add_task("Scanning packages...", total=len(specs))
+            task = progress.add_task(
+                "Scanning packages...", total=len(specs), current="",
+            )
             with concurrent.futures.ThreadPoolExecutor(max_workers=safe_workers) as ex:
                 futures = {ex.submit(scan_one, s): s for s in specs}
                 for fut in concurrent.futures.as_completed(futures):
                     result = fut.result()
                     results.append(result)
-                    progress.advance(task)
+                    progress.update(
+                        task,
+                        advance=1,
+                        current=result["package"],
+                    )
                     if result["verdict"] in ("MALICIOUS", "HIGH_RISK"):
                         progress.print(
                             f"  [red]⚠  {result['package']}=={result['version']} "
@@ -555,7 +613,13 @@ def audit(
     results.sort(key=lambda r: r["score"], reverse=True)
 
     if json_output:
-        click.echo(json.dumps({"lockfile": str(lock_path), "results": results}, indent=2))
+        output_data = {
+            "lockfile": str(lock_path),
+            "results": results,
+        }
+        if skipped_names:
+            output_data["skipped"] = skipped_names
+        click.echo(json.dumps(output_data, indent=2))
     elif sarif_output:
         from chaincanary.sarif import reports_to_sarif
 

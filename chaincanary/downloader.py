@@ -46,11 +46,15 @@ def _verify_hash(path: Path, expected_sha256: str) -> bool:
     return h.hexdigest() == expected_sha256
 
 
+DEFAULT_TIMEOUT = 30
+
+
 def download_wheel(
     package: str,
     version: str,
     target_dir: Path | None = None,
     verify_hash: bool = True,
+    timeout: int = DEFAULT_TIMEOUT,
 ) -> Path | None:
     """
     Download a wheel (or sdist) from PyPI to target_dir.
@@ -58,13 +62,14 @@ def download_wheel(
     - Uses retry with exponential backoff
     - Verifies SHA256 hash from PyPI metadata
     - Returns the path to the downloaded file, or None on failure
+    - timeout: per-request timeout in seconds (default 30)
     """
     session = _make_session()
 
     try:
         resp = session.get(
             PYPI_JSON_URL.format(package=package, version=version),
-            timeout=15,
+            timeout=timeout,
         )
         if resp.status_code == 404:
             return None
@@ -92,7 +97,7 @@ def download_wheel(
 
     # Stream download
     try:
-        file_resp = session.get(url, stream=True, timeout=60)
+        file_resp = session.get(url, stream=True, timeout=timeout)
         file_resp.raise_for_status()
         with open(dest, "wb") as f:
             for chunk in file_resp.iter_content(chunk_size=65536):
@@ -111,13 +116,17 @@ def download_wheel(
     return dest
 
 
-def get_latest_safe_version(package: str, current_version: str) -> str | None:
+def get_latest_safe_version(
+    package: str,
+    current_version: str,
+    timeout: int = DEFAULT_TIMEOUT,
+) -> str | None:
     """Find the latest version before current_version (safe rollback target)."""
     session = _make_session()
     try:
         resp = session.get(
             f"https://pypi.org/pypi/{package}/json",
-            timeout=15,
+            timeout=timeout,
         )
         if resp.status_code != 200:
             return None
@@ -139,13 +148,13 @@ def get_latest_safe_version(package: str, current_version: str) -> str | None:
         return None
 
 
-def get_all_versions(package: str) -> list[str]:
+def get_all_versions(package: str, timeout: int = DEFAULT_TIMEOUT) -> list[str]:
     """Get all available versions from PyPI."""
     session = _make_session()
     try:
         resp = session.get(
             f"https://pypi.org/pypi/{package}/json",
-            timeout=15,
+            timeout=timeout,
         )
         if resp.status_code != 200:
             return []
@@ -154,13 +163,17 @@ def get_all_versions(package: str) -> list[str]:
         return []
 
 
-def get_pypi_metadata(package: str, version: str) -> dict | None:
+def get_pypi_metadata(
+    package: str,
+    version: str,
+    timeout: int = DEFAULT_TIMEOUT,
+) -> dict | None:
     """Fetch full PyPI metadata for a package version."""
     session = _make_session()
     try:
         resp = session.get(
             PYPI_JSON_URL.format(package=package, version=version),
-            timeout=15,
+            timeout=timeout,
         )
         if resp.status_code != 200:
             return None
