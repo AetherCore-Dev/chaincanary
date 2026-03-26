@@ -18,7 +18,10 @@ from chaincanary.downloader import (
     get_latest_safe_version,
 )
 from chaincanary.models import Finding, RiskReport, Severity
-from chaincanary.safety_checks import check_typosquatting
+from chaincanary.safety_checks import (
+    check_dependency_confusion,
+    check_typosquatting,
+)
 
 console = Console(stderr=True)
 
@@ -30,11 +33,13 @@ class AnalysisEngine:
         verbose: bool = False,
         offline: bool = False,
         timeout: int = DEFAULT_TIMEOUT,
+        internal_names: set[str] | None = None,
     ):
         self.skip_dynamic = skip_dynamic
         self.verbose = verbose
         self.offline = offline
         self.timeout = timeout
+        self.internal_names: set[str] = internal_names or set()
         self.static = StaticAnalyzer()
         self.dynamic = DynamicAnalyzer()
 
@@ -70,6 +75,32 @@ class AnalysisEngine:
                         "verify you spelled the package name correctly."
                     ),
                     evidence=f"Input: {package!r}  →  Popular package: {typo['target']!r}",
+                    source="static",
+                )
+            )
+            report.calculate_score()
+
+        # ── Step 0b: Dependency confusion check ──────────────────
+        confusion = check_dependency_confusion(
+            package, internal_names=self.internal_names,
+        )
+        if confusion:
+            is_explicit = confusion["risk"] == "DEPENDENCY_CONFUSION"
+            report.findings.append(
+                Finding(
+                    rule_id="DEPENDENCY_CONFUSION",
+                    severity=(
+                        Severity.HIGH if is_explicit
+                        else Severity.MEDIUM
+                    ),
+                    title=(
+                        "Potential dependency confusion attack"
+                        if is_explicit
+                        else "Package name matches internal naming "
+                        "pattern"
+                    ),
+                    description=confusion["reason"],
+                    evidence=f"Package: {package}",
                     source="static",
                 )
             )

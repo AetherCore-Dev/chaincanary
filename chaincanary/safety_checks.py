@@ -238,3 +238,112 @@ def check_typosquatting(package_name: str) -> dict | None:
 def check_git_dependency(raw_dep: str) -> bool:
     """Return True if the dependency is a git+https:// or git+ssh:// reference."""
     return raw_dep.strip().startswith(("git+", "-e git+", "git://"))
+
+
+# ─────────────────────────────────────────────────────────────────
+# Dependency confusion detection
+# ─────────────────────────────────────────────────────────────────
+
+# Prefixes / suffixes that suggest internal / private packages
+_INTERNAL_PREFIXES = (
+    "internal-", "private-", "corp-", "mycompany-", "myorg-",
+    "our-", "company-", "team-",
+)
+
+_INTERNAL_SUFFIXES = (
+    "-internal", "-private", "-corp", "-proprietary",
+)
+
+# Compound patterns: <org>-<generic> where the name has 3+ segments
+_MIN_SEGMENTS_FOR_HEURISTIC = 3
+
+
+def is_internal_name_pattern(package_name: str) -> bool:
+    """
+    Heuristic: does this package name look like an internal package?
+
+    Looks for naming patterns common in private PyPI registries:
+    - Prefixed: mycompany-*, internal-*, corp-*
+    - Suffixed: *-internal, *-private
+    - Multi-segment org-scoped: bigcorp-secrets-manager (3+ segments)
+
+    Does NOT flag well-known public packages or short generic names.
+    """
+    norm = _norm(package_name)
+    name = norm.replace("_", "-")
+
+    # Known public → never flag
+    if package_name.lower().replace("_", "-") in {
+        _norm(p).replace("_", "-") for p in _POPULAR_PACKAGES
+    }:
+        return False
+
+    # Check prefixes
+    for prefix in _INTERNAL_PREFIXES:
+        if name.startswith(prefix) and len(name) > len(prefix):
+            return True
+
+    # Check suffixes
+    for suffix in _INTERNAL_SUFFIXES:
+        if name.endswith(suffix) and len(name) > len(suffix):
+            return True
+
+    # Multi-segment heuristic: "bigcorp-secrets-manager" (3+ dashes)
+    segments = name.split("-")
+    if len(segments) >= _MIN_SEGMENTS_FOR_HEURISTIC:
+        # Only flag if first segment looks like an org name
+        # (not a common word like "python" or "py")
+        first = segments[0]
+        common_prefixes = {
+            "python", "py", "pip", "django", "flask", "fast",
+            "async", "auto", "aws", "azure", "google", "cloud",
+        }
+        if first not in common_prefixes and len(first) >= 3:
+            return True
+
+    return False
+
+
+def check_dependency_confusion(
+    package_name: str,
+    internal_names: set[str] | None = None,
+) -> dict | None:
+    """
+    Check if a package could be a dependency confusion attack.
+
+    Args:
+        package_name: Name of the package to check.
+        internal_names: Set of known internal package names declared
+            by the user. If the package matches, it's flagged with
+            high confidence.
+
+    Returns:
+        Dict with risk info, or None if no risk detected.
+    """
+    if internal_names is None:
+        internal_names = set()
+
+    norm_input = _norm(package_name)
+    norm_internals = {_norm(n) for n in internal_names}
+
+    # ── Explicit match: user declared this as internal ───────────
+    if norm_internals and norm_input in norm_internals:
+        return {
+            "risk": "DEPENDENCY_CONFUSION",
+            "package": package_name,
+            "reason": "Matches declared internal package name",
+        }
+
+    # ── Heuristic: name looks like an internal package ───────────
+    if not norm_internals or norm_input not in norm_internals:
+        if is_internal_name_pattern(package_name):
+            return {
+                "risk": "DEPENDENCY_CONFUSION_HEURISTIC",
+                "package": package_name,
+                "reason": (
+                    "Package name matches common internal naming "
+                    "patterns (prefix/suffix/multi-segment org name)"
+                ),
+            }
+
+    return None

@@ -71,13 +71,16 @@ def _run_analysis(
     local_wheel: str | None = None,
     offline: bool = False,
     timeout: int = 30,
+    internal_names_set: set[str] | None = None,
 ):
     """Run full analysis with live progress display."""
     if not quiet:
         reporter.print_scanning(package, version)
 
     engine = AnalysisEngine(
-        skip_dynamic=skip_dynamic, verbose=verbose, offline=offline, timeout=timeout,
+        skip_dynamic=skip_dynamic, verbose=verbose,
+        offline=offline, timeout=timeout,
+        internal_names=internal_names_set,
     )
     local_path = Path(local_wheel) if local_wheel else None
 
@@ -143,6 +146,13 @@ def main():
     "--timeout", type=int, default=30, show_default=True,
     help="Per-request timeout in seconds for PyPI downloads.",
 )
+@click.option(
+    "--internal-names", default="",
+    help=(
+        "Comma-separated internal package names for "
+        "dependency confusion detection."
+    ),
+)
 def check(
     package_spec: str,
     skip_dynamic: bool,
@@ -152,6 +162,7 @@ def check(
     sarif_output: bool,
     offline: bool,
     timeout: int,
+    internal_names: str,
 ):
     """
     Check a package for security issues WITHOUT installing it.
@@ -180,12 +191,20 @@ def check(
         parts = whl_name.split("-")
         version = parts[1] if len(parts) >= 2 else "unknown"
 
+    # Parse internal names
+    int_names = {
+        s.strip().lower()
+        for s in internal_names.split(",")
+        if s.strip()
+    }
+
     report = _run_analysis(
         package, version, skip_dynamic=skip_dynamic, verbose=verbose,
         quiet=json_output or sarif_output,
         local_wheel=local_wheel,
         offline=offline,
         timeout=timeout,
+        internal_names_set=int_names or None,
     )
 
     if sarif_output:
@@ -358,6 +377,13 @@ def install(
         "(e.g., --skip torch,tensorflow)."
     ),
 )
+@click.option(
+    "--internal-names", default="",
+    help=(
+        "Comma-separated internal package names for "
+        "dependency confusion detection."
+    ),
+)
 def audit(
     lockfile: str,
     skip_dynamic: bool,
@@ -369,6 +395,7 @@ def audit(
     wheel_dir: str | None,
     timeout: int,
     skip_packages: str,
+    internal_names: str,
 ):
     """
     Audit all packages in a lockfile / requirements file.
@@ -468,9 +495,17 @@ def audit(
             f" — {lock_path} ({len(specs)} packages)\n"
         )
 
+    # Parse internal names for dependency confusion detection
+    int_names_set = {
+        s.strip().lower()
+        for s in internal_names.split(",")
+        if s.strip()
+    } if internal_names else None
+
     results = []
     engine = AnalysisEngine(
-        skip_dynamic=skip_dynamic, offline=offline, timeout=timeout,
+        skip_dynamic=skip_dynamic, offline=offline,
+        timeout=timeout, internal_names=int_names_set,
     )
 
     def scan_one(spec):
