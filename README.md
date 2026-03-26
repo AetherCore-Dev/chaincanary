@@ -9,7 +9,15 @@
 **Try it now — zero install:**
 
 ```bash
-pipx run chaincanary check litellm==1.82.8
+pipx run chaincanary check requests==2.28.0
+```
+
+Or scan the real LiteLLM attack (uses local mock wheel — no network):
+
+```bash
+git clone https://github.com/AetherCore-Dev/chaincanary && cd chaincanary
+pip install -e .
+chaincanary check litellm==1.82.8 --local tests/fixtures/litellm-1.82.8-py3-none-any.whl
 ```
 
 ---
@@ -24,8 +32,8 @@ pipx run chaincanary check litellm==1.82.8
 - **Version diffing** — see exactly what changed between releases
 - **Works in China** — no proxy needed, unlike socket.dev / Safety
 
-[![CI](https://github.com/AetherCore-Dev/chaincanary/actions/workflows/ci.yml/badge.svg)](https://github.com/AetherCore-Dev/chaincanary/actions)
 [![PyPI version](https://badge.fury.io/py/chaincanary.svg)](https://pypi.org/project/chaincanary/)
+[![CI](https://github.com/AetherCore-Dev/chaincanary/actions/workflows/ci.yml/badge.svg)](https://github.com/AetherCore-Dev/chaincanary/actions)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 
