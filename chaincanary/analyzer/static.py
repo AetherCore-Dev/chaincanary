@@ -662,6 +662,16 @@ class StaticAnalyzer:
                         )
                     )
 
+            # ── AST deep obfuscation scan ───────────────────────────
+            # Complements regex: catches string concat, chr() encoding,
+            # indirect imports, encoded exec, etc.
+            from chaincanary.analyzer.ast_deep import (
+                analyze_ast_obfuscation,
+            )
+
+            ast_findings = analyze_ast_obfuscation(code, py_file)
+            findings.extend(ast_findings)
+
             # ── AST deep analysis for install hooks ───────────────
             if is_hook:
                 try:
