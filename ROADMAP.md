@@ -48,14 +48,14 @@ Fixes identified during multi-angle security review:
 
 ### Usability
 - [ ] **`--timeout` flag** — per-package download timeout (default 30s)
-- [ ] **`--offline` mode** — skip download, scan local `.whl` files only
+- [x] **`--offline` mode** — skip download, scan local `.whl` files only ✅ implemented
 - [ ] **`chaincanary update`** — check if hash database is stale and refresh
 - [ ] **`--skip` patterns** — ignore known-safe packages (e.g., `--skip torch,tensorflow`)
   to speed up audit of large lockfiles
 - [ ] **Rich progress bar** — show per-package status during `audit` (currently silent)
 
 ### CI/CD
-- [ ] **SARIF output** — `--sarif-output` for GitHub Security tab integration
+- [x] **SARIF output** — `--sarif-output` for GitHub Security tab integration ✅ implemented
 - [ ] **Pre-commit hook** — `chaincanary-pre-commit` repo for `pre-commit` framework
 - [ ] **Docker image** — `ghcr.io/allenenli/chaincanary:latest` for isolated CI runs
 

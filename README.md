@@ -88,6 +88,38 @@ chaincanary check litellm==1.82.8 --json-output | jq '.verdict'
 # "MALICIOUS"
 ```
 
+### SARIF output (for GitHub Code Scanning)
+
+```bash
+# Single package → SARIF
+chaincanary check litellm==1.82.8 --local ./litellm-1.82.8-py3-none-any.whl --sarif-output > results.sarif
+
+# Audit lockfile → SARIF
+chaincanary audit requirements.txt --sarif-output > chaincanary.sarif
+```
+
+Upload to GitHub Security tab in your CI workflow:
+
+```yaml
+- name: Upload SARIF
+  uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: chaincanary.sarif
+```
+
+### Offline mode (air-gapped / CI cache)
+
+```bash
+# Download wheels first (standard pip)
+pip download -r requirements.txt -d ./wheels/
+
+# Scan without any network calls
+chaincanary audit requirements.txt --offline --wheel-dir ./wheels/
+
+# Single package offline
+chaincanary check mypackage==1.0.0 --offline --local ./mypackage-1.0.0-py3-none-any.whl
+```
+
 ---
 
 ## GitHub Action — drop-in CI protection
@@ -106,6 +138,12 @@ jobs:
         with:
           requirements: requirements.txt
           fail-on: MALICIOUS   # or HIGH_RISK for stricter mode
+          sarif-output: chaincanary.sarif  # optional: upload to GitHub Security tab
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: chaincanary.sarif
 ```
 
 Fails your build if any dependency matches a known attack pattern. Zero config.
@@ -251,7 +289,7 @@ chaincanary is a **static behavioral scanner**, not a magic bullet:
 | Version | Theme | Status |
 |---------|-------|--------|
 | **v0.1** | Core engine: `.pth` classifier, audit, diff, GitHub Action | shipped |
-| **v0.2** | Hash feed, SARIF output, pre-commit hook, `--offline` | planned |
+| **v0.2** | SARIF output, offline mode, hash feed, pre-commit hook | **in progress** |
 | **v0.3** | Lightweight sandbox, package reputation, npm/cargo | later |
 
 Full plan: [ROADMAP.md](ROADMAP.md)

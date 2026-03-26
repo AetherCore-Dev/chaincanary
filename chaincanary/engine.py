@@ -24,9 +24,11 @@ class AnalysisEngine:
         self,
         skip_dynamic: bool = False,
         verbose: bool = False,
+        offline: bool = False,
     ):
         self.skip_dynamic = skip_dynamic
         self.verbose = verbose
+        self.offline = offline
         self.static = StaticAnalyzer()
         self.dynamic = DynamicAnalyzer()
 
@@ -77,6 +79,25 @@ class AnalysisEngine:
                 dest = tmp_path / local_wheel.name
                 shutil.copy2(local_wheel, dest)
                 wheel_path = dest
+            elif self.offline:
+                # Offline mode without local wheel — can't proceed
+                report.findings.append(
+                    Finding(
+                        rule_id="OFFLINE_NO_WHEEL",
+                        severity=Severity.INFO,
+                        title=(
+                            f"Cannot scan {package}=={version} in offline mode"
+                            " without a local wheel"
+                        ),
+                        description=(
+                            "Use --local to provide a .whl file, "
+                            "or remove --offline to download from PyPI."
+                        ),
+                        source="static",
+                    )
+                )
+                report.calculate_score()
+                return report
             else:
                 progress("Downloading package...")
                 wheel_path = download_wheel(package, version, tmp_path)
@@ -99,8 +120,8 @@ class AnalysisEngine:
             report.findings.extend(static_findings)
             report.calculate_score()
 
-            # ── Step 3: Version Diff (skip if local-only) ────────────
-            if not local_wheel:
+            # ── Step 3: Version Diff (skip if local-only or offline) ──
+            if not local_wheel and not self.offline:
                 progress("Comparing with previous version...")
                 curr_files = self.static.get_wheel_filelist(wheel_path)
                 prev_wheel = self._get_prev_version_wheel(package, version, tmp_path)
@@ -159,9 +180,15 @@ class AnalysisEngine:
                 report.calculate_score()
 
             # ── Step 5: Safe version lookup + validation ─────────────
-            if report.verdict in ("HIGH_RISK", "MALICIOUS") and not local_wheel:
+            if (
+                report.verdict in ("HIGH_RISK", "MALICIOUS")
+                and not local_wheel
+                and not self.offline
+            ):
                 progress("Finding and validating safe version...")
-                report.safe_version = self._find_validated_safe_version(package, version, tmp_path)
+                report.safe_version = self._find_validated_safe_version(
+                    package, version, tmp_path,
+                )
 
         return report
 

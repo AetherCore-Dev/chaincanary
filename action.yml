@@ -26,6 +26,10 @@ inputs:
     description: 'Space-separated list of extra packages to scan (e.g. "litellm==1.82.7")'
     required: false
     default: ''
+  sarif-output:
+    description: 'Path to write SARIF output for GitHub Code Scanning (e.g. chaincanary.sarif). Leave empty to skip.'
+    required: false
+    default: ''
 
 outputs:
   result:
@@ -51,34 +55,40 @@ runs:
     - name: Run audit
       id: scan
       shell: bash
+      env:
+        INPUT_REQUIREMENTS: ${{ inputs.requirements }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_EXTRA_PACKAGES: ${{ inputs.extra-packages }}
+        INPUT_SARIF_OUTPUT: ${{ inputs.sarif-output }}
       run: |
         set +e
 
         FAIL_FLAG=""
-        if [ "${{ inputs.fail-on }}" = "HIGH_RISK" ]; then
+        if [ "$INPUT_FAIL_ON" = "HIGH_RISK" ]; then
           FAIL_FLAG="--fail-on HIGH_RISK"
         fi
 
         # Scan requirements file
-        if [ -f "${{ inputs.requirements }}" ]; then
-          chaincanary audit "${{ inputs.requirements }}" $FAIL_FLAG --json-output > audit_result.json 2>/dev/null
+        if [ -f "$INPUT_REQUIREMENTS" ]; then
+          chaincanary audit "$INPUT_REQUIREMENTS" $FAIL_FLAG --json-output > audit_result.json
           AUDIT_EXIT=$?
         else
-          echo "Warning: ${{ inputs.requirements }} not found, skipping file audit"
+          echo "Warning: $INPUT_REQUIREMENTS not found, skipping file audit"
           echo '{"results":[]}' > audit_result.json
           AUDIT_EXIT=0
         fi
 
+        # Generate SARIF from the same audit (no second scan)
+        if [ -n "$INPUT_SARIF_OUTPUT" ] && [ -f "$INPUT_REQUIREMENTS" ]; then
+          chaincanary audit "$INPUT_REQUIREMENTS" --sarif-output > "$INPUT_SARIF_OUTPUT"
+        fi
+
         # Scan extra packages
         EXTRA_EXIT=0
-        if [ -n "${{ inputs.extra-packages }}" ]; then
-          for pkg in ${{ inputs.extra-packages }}; do
+        if [ -n "$INPUT_EXTRA_PACKAGES" ]; then
+          for pkg in $INPUT_EXTRA_PACKAGES; do
             echo "Scanning extra package: $pkg"
-            name=$(echo $pkg | cut -d= -f1)
-            ver=$(echo $pkg | grep -oP '(?<===)[^=]+' || echo "")
-            if [ -n "$ver" ]; then
-              chaincanary check "$name" "$ver" $FAIL_FLAG || EXTRA_EXIT=$?
-            fi
+            chaincanary check "$pkg" || EXTRA_EXIT=$?
           done
         fi
 

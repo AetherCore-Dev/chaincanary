@@ -5,6 +5,53 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [Unreleased] — v0.2.0 dev
+
+### Added
+
+**SARIF v2.1.0 output** (`chaincanary/sarif.py` — new module)
+- `--sarif-output` flag on both `check` and `audit` commands
+- Generates SARIF v2.1.0 JSON for GitHub Code Scanning / Security tab
+- Package URL (purl) format for artifact URIs: `pkg:pypi/{name}@{version}`
+- SHA-256 partial fingerprints for cross-run deduplication
+- Severity mapping: CRITICAL/HIGH → error, MEDIUM → warning, LOW/INFO → note
+- Rule deduplication: same `rule_id` across multiple findings → one rule entry
+- Evidence truncation at 1024 chars to prevent SARIF bloat
+- Control character sanitization (null bytes, C0 chars stripped from evidence)
+- Robust `reports_to_sarif()` handles malformed audit dicts (None entries, missing keys, non-dict findings)
+- GitHub Action updated with `sarif-output` input for automatic SARIF upload
+
+**Offline mode** (`--offline` flag on `check` and `audit`)
+- `check --offline --local <path.whl>` — scan a local wheel with zero network calls
+- `audit --offline --wheel-dir <dir>` — scan all wheels in a directory against a lockfile
+- Engine skips version diff and safe version lookup in offline mode
+- Wheel filename parsing supports PEP 427 naming with hyphenated package names
+- Package name normalization (PEP 503): hyphens ↔ underscores matched correctly
+- Unpinned versions auto-resolved from available wheels in `--wheel-dir`
+- Typosquatting check still runs in offline mode (no network needed)
+- `OFFLINE_NO_WHEEL` finding emitted when no matching wheel found
+- Multiple platform wheels for same package/version produce single result
+
+### Fixed
+
+**action.yml security hardening**
+- Replaced inline `${{ inputs.* }}` interpolation with environment variables to prevent shell injection
+- Simplified extra-packages scanning flow
+
+**CLI output separation**
+- Diagnostics (progress, warnings) now go to stderr; structured output (JSON/SARIF) goes to stdout
+- Prevents mixing Rich terminal formatting with machine-readable output
+
+### Tests
+
+- 212 tests total (was 69) — all passing
+- `tests/test_sarif.py`: 78 tests covering SARIF schema compliance, severity mapping, fingerprints, rule dedup, batch output, tool driver, full round-trip
+- `tests/test_sarif_edge_cases.py`: 47 tests across 10 edge-case classes (empty strings, None fields, unicode, control chars, evidence boundaries, large-scale dedup, malformed dicts)
+- `tests/test_offline_edge_cases.py`: 18 tests (name normalization, subdirectory wheels, empty dirs, corrupted wheels, platform variants, unpinned versions, typosquatting in offline, SARIF+offline combo, mixed found/missing)
+- `tests/test_offline.py`: offline mode integration tests
+
+---
+
 ## [Unreleased] — post-0.1.0 hardening
 
 ### Fixed

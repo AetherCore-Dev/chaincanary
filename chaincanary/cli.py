@@ -24,6 +24,7 @@ from chaincanary import reporter
 from chaincanary.engine import AnalysisEngine
 
 console = Console()
+err_console = Console(stderr=True)
 
 
 def _parse_package_spec(spec: str) -> tuple[str, str | None]:
@@ -57,7 +58,7 @@ def _resolve_version(package: str, version: str | None) -> str:
         reporter.print_error(f"No valid versions found for '{package}'.")
         sys.exit(1)
     latest = str(max(parsed))
-    console.print(f"  [dim]→ Resolving to latest: {latest}[/dim]")
+    err_console.print(f"  [dim]→ Resolving to latest: {latest}[/dim]")
     return latest
 
 
@@ -68,12 +69,15 @@ def _run_analysis(
     verbose: bool = False,
     quiet: bool = False,  # suppress spinner (e.g., JSON mode or batch)
     local_wheel: str | None = None,
+    offline: bool = False,
 ):
     """Run full analysis with live progress display."""
     if not quiet:
         reporter.print_scanning(package, version)
 
-    engine = AnalysisEngine(skip_dynamic=skip_dynamic, verbose=verbose)
+    engine = AnalysisEngine(
+        skip_dynamic=skip_dynamic, verbose=verbose, offline=offline,
+    )
     local_path = Path(local_wheel) if local_wheel else None
 
     if quiet or not console.is_terminal:
@@ -124,7 +128,23 @@ def main():
     type=click.Path(exists=True),
     help="Scan a local .whl file instead of downloading from PyPI",
 )
-def check(package_spec: str, skip_dynamic: bool, verbose: bool, json_output: bool, local_wheel: str | None):
+@click.option(
+    "--sarif-output", is_flag=True,
+    help="Output as SARIF v2.1.0 (for GitHub Code Scanning)",
+)
+@click.option(
+    "--offline", is_flag=True,
+    help="No network calls. Requires --local for check.",
+)
+def check(
+    package_spec: str,
+    skip_dynamic: bool,
+    verbose: bool,
+    json_output: bool,
+    local_wheel: str | None,
+    sarif_output: bool,
+    offline: bool,
+):
     """
     Check a package for security issues WITHOUT installing it.
 
@@ -136,7 +156,15 @@ def check(package_spec: str, skip_dynamic: bool, verbose: bool, json_output: boo
         chaincanary check litellm==1.82.8 --local ./litellm-1.82.8-py3-none-any.whl
     """
     package, version = _parse_package_spec(package_spec)
-    if not local_wheel:
+
+    if offline and not local_wheel:
+        reporter.print_error(
+            "--offline requires --local <path.whl>. "
+            "Provide a local wheel file to scan."
+        )
+        sys.exit(1)
+
+    if not local_wheel and not offline:
         version = _resolve_version(package, version)
     elif not version:
         # Extract version from wheel filename if not provided
@@ -145,9 +173,17 @@ def check(package_spec: str, skip_dynamic: bool, verbose: bool, json_output: boo
         version = parts[1] if len(parts) >= 2 else "unknown"
 
     report = _run_analysis(
-        package, version, skip_dynamic=skip_dynamic, verbose=verbose, quiet=json_output,
+        package, version, skip_dynamic=skip_dynamic, verbose=verbose,
+        quiet=json_output or sarif_output,
         local_wheel=local_wheel,
+        offline=offline,
     )
+
+    if sarif_output:
+        from chaincanary.sarif import report_to_sarif
+
+        click.echo(json.dumps(report_to_sarif(report), indent=2))
+        sys.exit(1 if report.is_blocked else 0)
 
     if json_output:
         output = {
@@ -276,12 +312,34 @@ def install(
 @click.option("--workers", default=4, show_default=True, help="Parallel scan workers")
 @click.option("--json-output", "-j", is_flag=True, help="Output as JSON")
 @click.option(
+    "--sarif-output", is_flag=True,
+    help="Output as SARIF v2.1.0 (for GitHub Code Scanning)",
+)
+@click.option(
     "--fail-on",
     default="MALICIOUS",
     type=click.Choice(["HIGH_RISK", "MALICIOUS"]),
     help="Exit with error code if any package hits this verdict",
 )
-def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fail_on: str):
+@click.option(
+    "--offline", is_flag=True,
+    help="No network calls. Requires --wheel-dir for audit.",
+)
+@click.option(
+    "--wheel-dir", "wheel_dir",
+    type=click.Path(exists=True, file_okay=False),
+    help="Directory containing .whl files for offline scanning.",
+)
+def audit(
+    lockfile: str,
+    skip_dynamic: bool,
+    workers: int,
+    json_output: bool,
+    sarif_output: bool,
+    fail_on: str,
+    offline: bool,
+    wheel_dir: str | None,
+):
     """
     Audit all packages in a lockfile / requirements file.
 
@@ -298,10 +356,44 @@ def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fa
     from chaincanary.downloader import get_all_versions
     from chaincanary.lockfile import detect_lockfile, parse_lockfile
 
+    if offline and not wheel_dir:
+        reporter.print_error(
+            "--offline requires --wheel-dir <directory>. "
+            "Provide a directory containing .whl files."
+        )
+        sys.exit(1)
+
+    # Build wheel lookup table for offline mode
+    wheel_lookup: dict[str, Path] = {}
+    if wheel_dir:
+        wd = Path(wheel_dir)
+        for whl_file in wd.glob("*.whl"):
+            # Wheel filename: {name}-{version}-{python}-{abi}-{platform}.whl
+            # Last 3 parts are always: python, abi, platform
+            # Everything before that is: name-version
+            parts = whl_file.stem.split("-")
+            if len(parts) >= 5:
+                # Standard wheel: name-ver-py-abi-plat
+                # Name may contain hyphens, so join everything except
+                # version (second-to-last-3) and the 3 trailing tags
+                name_ver = "-".join(parts[:-3])
+                # Split name from version: version is the last segment
+                nv_parts = name_ver.rsplit("-", 1)
+                if len(nv_parts) == 2:
+                    pkg_name = nv_parts[0].lower().replace("_", "-")
+                    pkg_version = nv_parts[1]
+                    wheel_lookup[f"{pkg_name}=={pkg_version}"] = whl_file
+
+    # Use stderr for diagnostics when stdout is structured data
+    structured = json_output or sarif_output
+    out = err_console if structured else console
+
     # Cap workers to avoid PyPI rate-limiting (429 Too Many Requests)
     safe_workers = max(1, min(workers, 16))
     if workers > 16:
-        reporter.print_warning(f"--workers {workers} capped to 16 to avoid PyPI rate-limits.")
+        reporter.print_warning(
+            f"--workers {workers} capped to 16 to avoid PyPI rate-limits."
+        )
 
     lock_path = Path(lockfile) if lockfile != "requirements.txt" else Path(lockfile)
     if not lock_path.exists():
@@ -309,7 +401,7 @@ def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fa
         detected = detect_lockfile(Path("."))
         if detected:
             lock_path = detected
-            console.print(f"[dim]Auto-detected: {lock_path}[/dim]")
+            out.print(f"[dim]Auto-detected: {lock_path}[/dim]")
         else:
             reporter.print_error(f"File not found: {lockfile}")
             sys.exit(1)
@@ -319,12 +411,16 @@ def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fa
         reporter.print_error(f"No packages found in {lock_path}")
         sys.exit(1)
 
-    console.print(
-        f"\n[bold cyan]🔍 chaincanary audit[/bold cyan] — {lock_path} ({len(specs)} packages)\n"
-    )
+    if not structured:
+        out.print(
+            f"\n[bold cyan]🔍 chaincanary audit[/bold cyan]"
+            f" — {lock_path} ({len(specs)} packages)\n"
+        )
 
     results = []
-    engine = AnalysisEngine(skip_dynamic=skip_dynamic)
+    engine = AnalysisEngine(
+        skip_dynamic=skip_dynamic, offline=offline,
+    )
 
     def scan_one(spec):
         # ── Git dependencies: flag immediately, don't scan PyPI ──────
@@ -347,16 +443,24 @@ def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fa
             }
 
         version = spec.version
-        if not version:
+        if not version and not offline:
             # Resolve latest
             try:
                 versions = get_all_versions(spec.name)
                 parsed = sorted(
-                    [Version(v) for v in versions if not Version(v).is_prerelease], reverse=True
+                    [Version(v) for v in versions if not Version(v).is_prerelease],
+                    reverse=True,
                 )
                 version = str(parsed[0]) if parsed else None
             except Exception:
                 version = None
+
+        if not version and offline:
+            # In offline mode, try to find version from wheel_lookup
+            for key in wheel_lookup:
+                if key.startswith(spec.name.lower().replace("_", "-") + "=="):
+                    version = key.split("==")[1]
+                    break
 
         if not version:
             return {
@@ -367,7 +471,47 @@ def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fa
                 "findings": [],
             }
 
-        report = engine.analyze(spec.name, version)
+        # Look up local wheel if in offline mode
+        local_whl = None
+        if wheel_dir:
+            pkg_norm = spec.name.lower().replace("_", "-")
+            key = f"{pkg_norm}=={version}"
+            local_whl = wheel_lookup.get(key)
+
+        if offline and not local_whl:
+            # Still run typosquatting check (no network needed)
+            from chaincanary.safety_checks import check_typosquatting
+
+            findings_list = []
+            typo = check_typosquatting(spec.name)
+            if typo:
+                findings_list.append({
+                    "rule_id": "TYPOSQUATTING",
+                    "severity": "HIGH" if typo["likely_typosquat"] else "MEDIUM",
+                    "title": (
+                        f"Package name resembles '{typo['target']}' "
+                        f"(edit distance: {typo['distance']})"
+                    ),
+                })
+            findings_list.append({
+                "rule_id": "OFFLINE_NO_WHEEL",
+                "severity": "INFO",
+                "title": (
+                    f"No .whl found for {spec.name}=={version}"
+                    " in wheel directory"
+                ),
+            })
+            return {
+                "package": spec.name,
+                "version": version,
+                "score": 0,
+                "verdict": "UNKNOWN",
+                "findings": findings_list,
+            }
+
+        report = engine.analyze(
+            spec.name, version, local_wheel=local_whl,
+        )
         return {
             "package": spec.name,
             "version": version,
@@ -381,7 +525,7 @@ def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fa
         }
 
     # Parallel scan with progress bar
-    if json_output or not console.is_terminal:
+    if json_output or sarif_output or not console.is_terminal:
         with concurrent.futures.ThreadPoolExecutor(max_workers=safe_workers) as ex:
             futures = {ex.submit(scan_one, s): s for s in specs}
             for fut in concurrent.futures.as_completed(futures):
@@ -412,6 +556,10 @@ def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fa
 
     if json_output:
         click.echo(json.dumps({"lockfile": str(lock_path), "results": results}, indent=2))
+    elif sarif_output:
+        from chaincanary.sarif import reports_to_sarif
+
+        click.echo(json.dumps(reports_to_sarif(results), indent=2))
     else:
         _print_audit_table(results)
 
@@ -422,10 +570,18 @@ def audit(lockfile: str, skip_dynamic: bool, workers: int, json_output: bool, fa
         if r["verdict"] in (["MALICIOUS"] if fail_on == "MALICIOUS" else ["MALICIOUS", "HIGH_RISK"])
     ]
     if risky:
-        console.print(f"[bold red]✗ {len(risky)} package(s) failed the audit.[/bold red]\n")
+        if not structured:
+            out.print(
+                f"[bold red]✗ {len(risky)} package(s) failed the audit."
+                "[/bold red]\n"
+            )
         sys.exit(1)
     else:
-        console.print(f"[bold green]✓ All {len(results)} packages passed audit.[/bold green]\n")
+        if not structured:
+            out.print(
+                f"[bold green]✓ All {len(results)} packages passed audit."
+                "[/bold green]\n"
+            )
 
 
 def _print_audit_table(results: list[dict]) -> None:
