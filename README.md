@@ -29,7 +29,7 @@ subprocess.Popen(
 )
 ```
 
-This file runs **every time you start Python** — not just during `pip install`. It was downloaded ~95 million times per month. Every other scanner passed it clean. chaincanary flagged it **MALICIOUS**.
+This file runs **every time you start Python** — not just during `pip install`. It was downloaded ~95 million times per month. chaincanary flagged it **MALICIOUS** at publish time — without any advisory, rule update, or cloud lookup.
 
 ---
 
@@ -185,7 +185,10 @@ chaincanary is the only tool with a **semantic `.pth` classifier**:
 | setuptools distutils shim | Safe code | ⚠ LOW |
 | `subprocess.Popen(['curl', ...])` | **Dangerous** | 🔴 CRITICAL |
 
-**This is why LiteLLM 1.82.7 was flagged MALICIOUS while every other tool passed it clean.**
+**This is the core difference.** Other tools scan `setup.py` install hooks — which fire at `pip install` time. A `.pth` file has no install hook: it executes on every Python startup, silently, forever. Detecting it requires understanding *what the code does*, not just *when it runs*.
+
+> LiteLLM 1.82.7 was flagged MALICIOUS by chaincanary at publish time.  
+> Other tools either missed it entirely, or flagged it only after the attack was public and rules were manually updated.
 
 ---
 
@@ -210,13 +213,15 @@ chaincanary is the only tool with a **semantic `.pth` classifier**:
 
 | | **chaincanary** | pip-audit | Trivy | socket.dev | Safety |
 |---|---|---|---|---|---|
-| `.pth` semantic analysis | ✅ **4-category** | ❌ | ❌ | ❌ | ❌ |
+| `.pth` semantic analysis | ✅ **4-category** | ❌ | ❌ | ⚠️ no static classifier | ❌ |
+| Detects LiteLLM 1.82.7 at publish time | ✅ offline, no rules needed | ❌ | ❌ | ⚠️ only after manual rule update | ❌ |
 | No account needed | ✅ | ✅ | ✅ | ❌ requires GitHub App | ❌ requires account |
 | Nothing leaves your machine | ✅ | ✅ | ✅ | ❌ uploads repo metadata | ✅ |
-| Offline capable | ✅ | partial | ✅ | ❌ | ❌ |
+| Offline capable | ✅ | partial | ✅ | ❌ cloud-dependent | ❌ |
 | Open source | ✅ | ✅ | ✅ | ❌ SaaS | partial |
 
-> **chaincanary is the only tool that would have caught LiteLLM 1.82.7.**  
+> **chaincanary detects `.pth`-based attacks through semantic analysis — no cloud, no advisory, no rule update required.**  
+> Other tools may eventually flag known attacks after manual signature updates. chaincanary catches them structurally, before anyone publishes an advisory.  
 > It is not a CVE scanner — use it alongside `pip-audit` for vulnerability advisory coverage.
 
 ---
