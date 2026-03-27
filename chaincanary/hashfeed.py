@@ -26,7 +26,7 @@ import time
 import urllib.parse
 from pathlib import Path
 
-import requests
+import requests  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 

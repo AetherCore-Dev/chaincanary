@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 chaincanary is a Python supply-chain attack scanner that detects malicious packages *before* installation. It performs pure offline static analysis on `.whl` files — no Docker, no sandbox, no cloud. Born from the LiteLLM 1.82.7/.8 attack (March 2026).
 
-Current version: **0.1.5** (v0.1 shipped, post-0.1 hardening complete, v0.2 planned).
+Current version: **0.2.0** (v0.2 shipped — SARIF, offline mode, AST deep scan, hash feed, dep confusion detection).
 
 ## Build & Development Commands
 

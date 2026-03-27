@@ -10,8 +10,8 @@ import re
 import tempfile
 from pathlib import Path
 
-import requests
-from requests.adapters import HTTPAdapter
+import requests  # type: ignore[import-untyped]
+from requests.adapters import HTTPAdapter  # type: ignore[import-untyped]
 from urllib3.util.retry import Retry
 
 PYPI_JSON_URL = "https://pypi.org/pypi/{package}/{version}/json"

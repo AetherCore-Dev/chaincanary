@@ -110,6 +110,7 @@ class AnalysisEngine:
             tmp_path = Path(tmpdir)
 
             # ── Step 1: Download (or use local wheel) ────────────────
+            wheel_path: Path | None = None
             if local_wheel:
                 import shutil
                 progress("Using local wheel file...")
@@ -168,7 +169,9 @@ class AnalysisEngine:
                     report.behavior_diff = file_diff
 
                     if file_diff.get("new_pth_files"):
-                        already_reported = any(f.rule_id == "PTH_FILE_INSTALL" for f in report.findings)
+                        already_reported = any(
+                            f.rule_id == "PTH_FILE_INSTALL" for f in report.findings
+                        )
                         if not already_reported:
                             report.findings.append(
                                 Finding(
@@ -199,7 +202,10 @@ class AnalysisEngine:
                                     "Files with suspicious names were added"
                                     " compared to the previous version."
                                 ),
-                                evidence=f"New suspicious files: {file_diff['new_suspicious_files']}",
+                                evidence=(
+                                    "New suspicious files: "
+                                    f"{file_diff['new_suspicious_files']}"
+                                ),
                                 source="static",
                             )
                         )

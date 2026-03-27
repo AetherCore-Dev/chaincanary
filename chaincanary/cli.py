@@ -188,7 +188,7 @@ def check(
         version = _resolve_version(package, version)
     elif not version:
         # Extract version from wheel filename if not provided
-        whl_name = Path(local_wheel).stem
+        whl_name = Path(local_wheel or "").stem
         parts = whl_name.split("-")
         version = parts[1] if len(parts) >= 2 else "unknown"
 
@@ -451,8 +451,8 @@ def audit(
     # Cap workers to avoid PyPI rate-limiting (429 Too Many Requests)
     safe_workers = max(1, min(workers, 16))
     if workers > 16:
-        reporter.print_warning(
-            f"--workers {workers} capped to 16 to avoid PyPI rate-limits."
+        err_console.print(
+            f"[yellow]Warning:[/yellow] --workers {workers} capped to 16 to avoid PyPI rate-limits."
         )
 
     lock_path = Path(lockfile)

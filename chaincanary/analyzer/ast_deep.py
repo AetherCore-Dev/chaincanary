@@ -478,7 +478,7 @@ def _full_call_name(node: ast.Call) -> str | None:
         return func.id
     if isinstance(func, ast.Attribute):
         parts = []
-        current = func
+        current: ast.expr = func
         while isinstance(current, ast.Attribute):
             parts.append(current.attr)
             current = current.value

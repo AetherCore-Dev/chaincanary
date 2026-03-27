@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "chaincanary"
-version = "0.1.5"
+version = "0.2.0"
 description = "Security scanner for Python packages — detects supply chain attacks before they execute"
 readme = "README.md"
 license = { text = "Apache-2.0" }

@@ -5,7 +5,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
-## [Unreleased] — v0.2.0 dev
+## [0.2.0] — 2026-03-27
 
 ### Added
 
@@ -32,6 +32,25 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - `OFFLINE_NO_WHEEL` finding emitted when no matching wheel found
 - Multiple platform wheels for same package/version produce single result
 
+**Remote hash feed** (`chaincanary/hashfeed.py` — new module)
+- Pull `known_malicious_hashes` from remote JSON feed (GitHub raw) instead of hardcoding
+- Auto-update on first run with configurable refresh interval
+- `chaincanary update` command to manually refresh hash database
+
+**Dependency confusion detection**
+- Flag packages with same name as internal packages
+- Useful in companies with private PyPI mirrors
+
+**AST deep scan** (`chaincanary/analyzer/ast_deep.py` — new module)
+- Detects obfuscation patterns regex misses (e.g., `getattr(obj, "g"+"et")`)
+- String concatenation in getattr/import calls
+- Deep analysis of `__init__.py` for hidden malicious patterns
+
+**CLI enhancements**
+- `--timeout` flag — per-package download timeout (default 30s)
+- `--skip` patterns — ignore known-safe packages (e.g., `--skip torch,tensorflow`)
+- Rich progress bar for `audit` command (no longer silent)
+
 ### Fixed
 
 **action.yml security hardening**
@@ -42,17 +61,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - Diagnostics (progress, warnings) now go to stderr; structured output (JSON/SARIF) goes to stdout
 - Prevents mixing Rich terminal formatting with machine-readable output
 
+**Type safety fixes**
+- Fixed mypy type errors across 5 modules (ast_deep, engine, cli, hashfeed, downloader)
+- Fixed ruff E501 line-length violations in engine.py
+
 ### Tests
 
-- 212 tests total (was 69) — all passing
-- `tests/test_sarif.py`: 78 tests covering SARIF schema compliance, severity mapping, fingerprints, rule dedup, batch output, tool driver, full round-trip
-- `tests/test_sarif_edge_cases.py`: 47 tests across 10 edge-case classes (empty strings, None fields, unicode, control chars, evidence boundaries, large-scale dedup, malformed dicts)
-- `tests/test_offline_edge_cases.py`: 18 tests (name normalization, subdirectory wheels, empty dirs, corrupted wheels, platform variants, unpinned versions, typosquatting in offline, SARIF+offline combo, mixed found/missing)
-- `tests/test_offline.py`: offline mode integration tests
+- 306 tests total (was 69 in v0.1.5) — all passing
+- `tests/test_sarif.py`: 78 tests covering SARIF schema compliance
+- `tests/test_sarif_edge_cases.py`: 47 edge-case tests
+- `tests/test_offline_edge_cases.py`: 18 offline mode edge-case tests
+- `tests/test_ast_deep.py`: AST deep scan detection tests
+- `tests/test_dep_confusion.py`: dependency confusion tests
+- `tests/test_hashfeed.py`: remote hash feed tests
+- `tests/test_timeout.py`, `tests/test_skip.py`: new flag tests
 
 ---
 
-## [Unreleased] — post-0.1.0 hardening
+## [0.1.6] — 2026-03-26 (post-0.1.0 hardening)
 
 ### Fixed
 

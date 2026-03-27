@@ -33,31 +33,29 @@ Fixes identified during multi-angle security review:
 
 ---
 
-## 📋 v0.2.0 — planned
+## ✅ v0.2.0 — shipped (2026-03-27)
 
 **Theme: better signal, fewer false positives, real-world usability**
 
 ### Detection improvements
-- [ ] **Hash feed** — pull `known_malicious_hashes` from a remote JSON feed (GitHub raw)
-  instead of hardcoding. Auto-update on first run / daily. Signed with a public key.
-- [ ] **Dependency confusion detection** — flag packages with the same name as
-  internal packages (common in companies with private PyPI mirrors)
-- [ ] **Wheel signing check** — flag packages not signed via Sigstore/PEP 740
-- [ ] **`__init__.py` AST deep scan** — currently only regex; add AST for obfuscation
-  that regex misses (e.g., `getattr(obj, "g"+"et")`)
+- [x] **Hash feed** — remote JSON feed with auto-update (`hashfeed.py`)
+- [x] **Dependency confusion detection** — flag internal package name collisions
+- [x] **`__init__.py` AST deep scan** — catches `getattr(obj, "g"+"et")` style obfuscation (`ast_deep.py`)
 
 ### Usability
-- [ ] **`--timeout` flag** — per-package download timeout (default 30s)
-- [x] **`--offline` mode** — skip download, scan local `.whl` files only ✅ implemented
-- [ ] **`chaincanary update`** — check if hash database is stale and refresh
-- [ ] **`--skip` patterns** — ignore known-safe packages (e.g., `--skip torch,tensorflow`)
-  to speed up audit of large lockfiles
-- [ ] **Rich progress bar** — show per-package status during `audit` (currently silent)
+- [x] **`--timeout` flag** — per-package download timeout (default 30s)
+- [x] **`--offline` mode** — scan local `.whl` files with zero network calls
+- [x] **`chaincanary update`** — refresh hash database from remote feed
+- [x] **`--skip` patterns** — ignore known-safe packages
+- [x] **Rich progress bar** — per-package status during `audit`
 
 ### CI/CD
-- [x] **SARIF output** — `--sarif-output` for GitHub Security tab integration ✅ implemented
-- [ ] **Pre-commit hook** — `chaincanary-pre-commit` repo for `pre-commit` framework
-- [ ] **Docker image** — `ghcr.io/allenenli/chaincanary:latest` for isolated CI runs
+- [x] **SARIF output** — `--sarif-output` for GitHub Security tab integration
+
+### Still planned (backlog)
+- [ ] **Wheel signing check** — flag unsigned packages (Sigstore/PEP 740)
+- [ ] **Pre-commit hook** — `chaincanary-pre-commit` repo
+- [ ] **Docker image** — `ghcr.io/allenenli/chaincanary:latest`
 
 ---
 
