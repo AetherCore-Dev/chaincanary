@@ -59,6 +59,7 @@ Changelog = "https://github.com/AetherCore-Dev/chaincanary/blob/main/CHANGELOG.m
 
 [project.scripts]
 chaincanary = "chaincanary.cli:main"
+chaincanary-pre-commit = "chaincanary.pre_commit:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["chaincanary"]

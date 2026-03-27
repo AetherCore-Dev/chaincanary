@@ -1,0 +1,8 @@
+- id: chaincanary-audit
+  name: chaincanary supply chain scanner
+  description: Scan Python dependencies for supply chain attacks
+  entry: chaincanary-pre-commit
+  language: python
+  files: '(requirements.*\.txt|pyproject\.toml|Pipfile\.lock)$'
+  types: [text]
+  stages: [pre-commit]

@@ -156,7 +156,7 @@ class TestCLITimeout:
     def test_check_timeout_default_is_30(self):
         """When --timeout is not specified, default should be 30."""
         runner = CliRunner()
-        with patch("chaincanary.cli._run_analysis") as mock_run:
+        with patch("chaincanary.cli.check_cmd._run_analysis") as mock_run:
             mock_report = MagicMock()
             mock_report.score = 0
             mock_report.verdict = "SAFE"

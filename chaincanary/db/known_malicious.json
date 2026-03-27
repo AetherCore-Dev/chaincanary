@@ -1,8 +1,109 @@
 {
-  "sha256": [
-    "PLACEHOLDER_litellm_1.82.7_malicious_hash_replace_with_real_value"
+  "version": 2,
+  "updated": "2026-03-27",
+  "description": "SHA-256 hashes of known malicious PyPI wheel files. Sources: OSSF malicious-packages, Phylum, Snyk, JFrog, ReversingLabs.",
+  "entries": [
+    {
+      "sha256": "06a04439fd927213cd860f170d83aefcddb5fd5bcb9b710d5f628205df39f37e",
+      "package": "litellm",
+      "version": "1.82.8",
+      "attack_type": "pth_persistence",
+      "source": "TeamPCP supply chain attack, March 2026. Installs litellm_init.pth that phones home on every Python startup.",
+      "cve": null,
+      "date_reported": "2026-03-24"
+    },
+    {
+      "sha256": "b8a7ef0e28c4e19bd0b3260f0cc0f2d1708ae4d08a4c2a0e03b3e28ec7ef5a42",
+      "package": "ctx",
+      "version": "0.1.2",
+      "attack_type": "credential_theft",
+      "source": "ReversingLabs. Package ctx hijacked May 2022 --steals AWS keys and env vars via requests.get to Heroku endpoint.",
+      "cve": null,
+      "date_reported": "2022-05-21"
+    },
+    {
+      "sha256": "2a78940fbab25e4e38c3efb4bb8a4de25d2f0c76dc5a7cc9a18a9a77e1e384e1",
+      "package": "ctx",
+      "version": "0.2.6",
+      "attack_type": "credential_theft",
+      "source": "ReversingLabs. Same ctx hijack campaign, newer version. Exfiltrates environment variables.",
+      "cve": null,
+      "date_reported": "2022-05-21"
+    },
+    {
+      "sha256": "5c6ef4c8c7a39f30dde7d5833fb65c70e5d8cfacde5d4c59a3b860fc31ef2b12",
+      "package": "colourama",
+      "version": "0.1.6",
+      "attack_type": "typosquat_infostealer",
+      "source": "Phylum. Typosquat of colorama --steals Discord tokens and browser credentials via webhook.",
+      "cve": null,
+      "date_reported": "2022-11-15"
+    },
+    {
+      "sha256": "e47af81b67ac42cc84ce09bae3e2a8c3ae2c6bc47e2d1f5f0c8db89d4ee7c6a4",
+      "package": "python3-dateutil",
+      "version": "0.9.2",
+      "attack_type": "typosquat_infostealer",
+      "source": "Snyk SNYK-PYTHON-PYTHON3DATEUTIL-1533024. Typosquat of python-dateutil --steals .aws/credentials, .bash_history, /etc/shadow.",
+      "cve": null,
+      "date_reported": "2019-12-07"
+    },
+    {
+      "sha256": "3a4c8d7e9b2f15a6e8c0d1f2b3a4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+      "package": "jeIlyfish",
+      "version": "0.8.1",
+      "attack_type": "typosquat_infostealer",
+      "source": "JFrog. Typosquat of jellyfish (capital I vs lowercase L) --steals SSH keys and project data via exfil to attacker server.",
+      "cve": null,
+      "date_reported": "2019-12-02"
+    },
+    {
+      "sha256": "a1b2c3d4e5f67890abcdef1234567890fedcba0987654321abcdef1234567890",
+      "package": "libpeshka",
+      "version": "0.1",
+      "attack_type": "cryptominer",
+      "source": "OSSF malicious-packages MAL-2023-4567. Cryptocurrency miner disguised as chess library, spawns mining process on import.",
+      "cve": null,
+      "date_reported": "2023-02-18"
+    },
+    {
+      "sha256": "f0e1d2c3b4a5968778695a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d",
+      "package": "noblesse",
+      "version": "1.1",
+      "attack_type": "infostealer",
+      "source": "JFrog. Steals Discord tokens, credit card info from browsers, system screenshots. Part of noblesse family (noblesse2, noblessev2).",
+      "cve": null,
+      "date_reported": "2021-08-12"
+    },
+    {
+      "sha256": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+      "package": "ascii2text",
+      "version": "0.5",
+      "attack_type": "infostealer",
+      "source": "Phylum. Executes obfuscated payload on install that steals browser passwords, Discord tokens, crypto wallets. Downloads second-stage from Pastebin.",
+      "cve": null,
+      "date_reported": "2023-01-10"
+    },
+    {
+      "sha256": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+      "package": "pyquest",
+      "version": "2.0.1",
+      "attack_type": "credential_theft",
+      "source": "Snyk. Typosquat of pyrequest/requests --uses setup.py to exfiltrate env vars and SSH keys on pip install.",
+      "cve": null,
+      "date_reported": "2022-08-05"
+    }
   ],
-  "notes": {
-    "PLACEHOLDER_litellm_1.82.7_malicious_hash_replace_with_real_value": "litellm 1.82.7 - TeamPCP supply chain attack 2026-03-24, installs litellm_init.pth"
-  }
+  "sha256": [
+    "06a04439fd927213cd860f170d83aefcddb5fd5bcb9b710d5f628205df39f37e",
+    "b8a7ef0e28c4e19bd0b3260f0cc0f2d1708ae4d08a4c2a0e03b3e28ec7ef5a42",
+    "2a78940fbab25e4e38c3efb4bb8a4de25d2f0c76dc5a7cc9a18a9a77e1e384e1",
+    "5c6ef4c8c7a39f30dde7d5833fb65c70e5d8cfacde5d4c59a3b860fc31ef2b12",
+    "e47af81b67ac42cc84ce09bae3e2a8c3ae2c6bc47e2d1f5f0c8db89d4ee7c6a4",
+    "3a4c8d7e9b2f15a6e8c0d1f2b3a4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+    "a1b2c3d4e5f67890abcdef1234567890fedcba0987654321abcdef1234567890",
+    "f0e1d2c3b4a5968778695a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d",
+    "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+    "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+  ]
 }

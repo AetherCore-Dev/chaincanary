@@ -56,7 +56,7 @@ class TestAuditSkipFlag:
         # Should not fail with "No such option: --skip"
         assert "No such option" not in (result.output or "")
 
-    @patch("chaincanary.cli.AnalysisEngine")
+    @patch("chaincanary.cli.audit_cmd.AnalysisEngine")
     def test_skip_excludes_packages(
         self, mock_engine_cls, sample_requirements,
     ):
@@ -79,7 +79,7 @@ class TestAuditSkipFlag:
         assert "click" in scanned
         assert "flask" in scanned
 
-    @patch("chaincanary.cli.AnalysisEngine")
+    @patch("chaincanary.cli.audit_cmd.AnalysisEngine")
     def test_skip_case_insensitive(
         self, mock_engine_cls, sample_requirements,
     ):
@@ -98,7 +98,7 @@ class TestAuditSkipFlag:
         assert "torch" not in scanned
         assert "tensorflow" not in scanned
 
-    @patch("chaincanary.cli.AnalysisEngine")
+    @patch("chaincanary.cli.audit_cmd.AnalysisEngine")
     def test_skip_with_spaces(
         self, mock_engine_cls, sample_requirements,
     ):
@@ -127,7 +127,7 @@ class TestAuditSkipFlag:
         ])
         assert "No such option" not in (result.output or "")
 
-    @patch("chaincanary.cli.AnalysisEngine")
+    @patch("chaincanary.cli.audit_cmd.AnalysisEngine")
     def test_skip_shows_skipped_count(
         self, mock_engine_cls, sample_requirements,
     ):
@@ -142,7 +142,7 @@ class TestAuditSkipFlag:
 
         assert "skipped" in result.output.lower()
 
-    @patch("chaincanary.cli.AnalysisEngine")
+    @patch("chaincanary.cli.audit_cmd.AnalysisEngine")
     def test_skip_json_output_includes_metadata(
         self, mock_engine_cls, sample_requirements,
     ):
