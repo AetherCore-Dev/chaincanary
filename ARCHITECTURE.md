@@ -1,19 +1,12 @@
 # chaincanary — Architecture
 
-> A pip package installation security sandbox that detects supply chain attacks
-> before they compromise your system.
+> A Python supply-chain attack scanner that detects malicious packages
+> *before* installation. Pure offline static analysis — no Docker, no sandbox,
+> no cloud.
 >
-> **Origin story:** Born from the LiteLLM 1.82.7 supply chain attack (2026-03-24),
-> where TeamPCP injected a malicious `.pth` file that executed on every Python startup.
-
----
-
-## One-liner
-
-```
-chaincanary is a pip installation sandbox that helps AI developers avoid
-supply chain attacks like LiteLLM 1.82.7.
-```
+> **Origin story:** Born from the LiteLLM 1.82.7/.8 supply chain attack
+> (2026-03-24), where TeamPCP injected a malicious `.pth` file that executed
+> on every Python startup.
 
 ---
 
@@ -22,159 +15,76 @@ supply chain attacks like LiteLLM 1.82.7.
 1. **Zero false negatives on known attacks** — Must catch LiteLLM 1.82.7 demo case
 2. **Developer UX first** — Beautiful terminal output, one-command install
 3. **Non-blocking by default** — Warn, don't break CI unless configured to block
-4. **Layered detection** — Static first (fast), dynamic sandbox second (accurate)
+4. **Layered detection** — Static first (fast), dynamic sandbox later (v0.3)
 5. **Version diffing** — Compare against previous version behavior to highlight *changes*
+6. **Nothing leaves your machine** — Pure offline static analysis, no cloud, no account
 
 ---
 
-## Architecture Overview
+## Analysis Pipeline
+
+`AnalysisEngine.analyze()` in `engine.py` orchestrates the detection pipeline:
 
 ```
-chaincanary install <package>==<version>
+chaincanary check <package>==<version>
         │
         ▼
-┌───────────────────┐
-│  1. Static Analysis│  (fast, ~2s)
-│  ─────────────────│
-│  • Unpack wheel   │
-│  • Scan for .pth  │
-│  • AST analysis   │
-│  • setup.py hooks │
-│  • Known malware  │
-│    hash DB        │
-└────────┬──────────┘
-         │ risk_score > 3 or suspicious?
+┌────────────────────────────────────────┐
+│  Step 0: Safety Checks (no download)   │
+│  ──────────────────────────────────── │
+│  • Typosquatting (Levenshtein)         │
+│  • Dependency confusion                │
+└────────┬───────────────────────────────┘
          ▼
-┌───────────────────┐
-│  2. Dynamic       │  (thorough, ~15s)
-│     Sandbox       │
-│  ─────────────────│
-│  • Docker/        │
-│    bubblewrap     │
-│  • strace monitor │
-│  • Network calls  │
-│  • File writes    │
-│  • Subprocess     │
-│  • Env var reads  │
-└────────┬──────────┘
-         │
+┌────────────────────────────────────────┐
+│  Step 1: Download .whl (or --local)    │
+│  ──────────────────────────────────── │
+│  • PyPI download with SHA256 verify    │
+│  • Retry with exponential backoff      │
+│  • 200 MB hard cap                     │
+└────────┬───────────────────────────────┘
          ▼
-┌───────────────────┐
-│  3. Version Diff  │
-│  ─────────────────│
-│  • Compare vs     │
-│    prev version   │
-│  • Highlight new  │
-│    behaviors      │
-└────────┬──────────┘
-         │
+┌────────────────────────────────────────┐
+│  Step 2: Attestation (PEP 740)         │
+│  ──────────────────────────────────── │
+│  • Query PyPI Integrity API            │
+│  • Sigstore publisher metadata         │
+│  • INFO-only, no score impact          │
+└────────┬───────────────────────────────┘
          ▼
-┌───────────────────┐
-│  4. Risk Report   │
-│  ─────────────────│
-│  • Score 0-10     │
-│  • Findings list  │
-│  • Safe version   │
-│    recommendation │
-│  • Block / Warn / │
-│    Allow          │
-└───────────────────┘
-```
-
----
-
-## Detection Rules
-
-### Static Rules (always run)
-| Rule | Severity | Description |
-|------|----------|-------------|
-| `pth_file_write` | CRITICAL | Package installs a `.pth` file → executes on every Python startup |
-| `setup_exec` | HIGH | `setup.py` calls `exec()`, `eval()`, or `os.system()` |
-| `obfuscated_code` | HIGH | base64 decode + exec pattern |
-| `network_in_setup` | HIGH | Network requests during `setup.py` |
-| `subprocess_in_setup` | MEDIUM | Subprocess calls during install hooks |
-| `sensitive_path_write` | HIGH | Writes to `~/.ssh`, `~/.aws`, `/etc` |
-| `known_malicious_hash` | CRITICAL | SHA256 matches known malware database |
-
-### Dynamic Rules (run in sandbox)
-| Rule | Severity | Description |
-|------|----------|-------------|
-| `outbound_network` | HIGH | Any network connection during install |
-| `file_write_homedir` | HIGH | Writes files outside package directory |
-| `env_var_exfil` | CRITICAL | Reads env vars then makes network call |
-| `persistent_hook` | CRITICAL | Installs `.pth`, `.pth`-like, or sitecustomize |
-| `subprocess_spawn` | MEDIUM | Spawns child processes |
-| `credential_read` | CRITICAL | Reads `~/.netrc`, `~/.aws/credentials`, etc. |
-
----
-
-## MVP Scope (Day 1-3)
-
-### Day 1: Core Engine
-- [ ] `chaincanary/analyzer/static.py` — static analysis
-- [ ] `chaincanary/analyzer/dynamic.py` — Docker sandbox
-- [ ] `chaincanary/analyzer/rules.py` — detection rules
-- [ ] `chaincanary/models.py` — RiskReport, Finding, Severity
-
-### Day 2: CLI + UX
-- [ ] `chaincanary/cli.py` — Click-based CLI
-- [ ] `chaincanary/reporter.py` — Rich terminal output
-- [ ] `chaincanary/diff.py` — version behavior comparison
-- [ ] Demo: `chaincanary install litellm==1.82.7` → catches attack
-
-### Day 3: Polish + Publish
-- [ ] `chaincanary/integrations/github_actions.py` — GHA integration
-- [ ] `README.md` — full docs with demo GIF
-- [ ] `pyproject.toml` — publish to PyPI
-- [ ] GitHub Actions CI for chaincanary itself
-
----
-
-## Tech Stack
-
-| Component | Choice | Reason |
-|-----------|--------|--------|
-| CLI framework | `click` + `rich` | Beautiful output, industry standard |
-| Sandbox (MVP) | Docker SDK | Cross-platform, fastest to ship |
-| Sandbox (v2) | `bubblewrap` | Linux-native, lighter, CI-friendly |
-| System monitoring | `strace` → `eBPF` | strace for MVP, eBPF for production |
-| Package parsing | `pip`, `pkginfo`, `zipfile` | Standard library |
-| Hash DB | Local JSON + GitHub-hosted | Simple, updatable |
-
----
-
-## Project Structure
-
-```
-chaincanary/
-├── chaincanary/
-│   ├── __init__.py
-│   ├── cli.py              # Entry point
-│   ├── models.py           # RiskReport, Finding, Severity
-│   ├── analyzer/
-│   │   ├── __init__.py
-│   │   ├── static.py       # Static analysis (AST, file inspection)
-│   │   ├── dynamic.py      # Dynamic sandbox (Docker/strace)
-│   │   ├── rules.py        # Detection rule definitions
-│   │   └── differ.py       # Version behavior diff
-│   ├── reporter.py         # Rich terminal output
-│   ├── downloader.py       # Fetch wheel from PyPI without installing
-│   ├── integrations/
-│   │   ├── github_actions.py
-│   │   └── pre_commit.py
-│   └── db/
-│       └── known_malicious.json  # Known malware hashes
-├── tests/
-│   ├── test_static.py
-│   ├── test_dynamic.py
-│   └── fixtures/           # Test packages (including mock malicious)
-├── .github/
-│   └── workflows/
-│       └── ci.yml
-├── README.md
-├── ARCHITECTURE.md
-├── pyproject.toml
-└── LICENSE                 # MIT
+┌────────────────────────────────────────┐
+│  Step 3: Static Analysis  (~2s)        │
+│  ──────────────────────────────────── │
+│  • Zip safety (traversal, bomb)        │
+│  • .pth semantic classifier            │
+│  • AST deep scan (obfuscation)         │
+│  • setup.py / install hook analysis    │
+│  • DNS exfiltration patterns           │
+│  • Known malicious hash DB lookup      │
+└────────┬───────────────────────────────┘
+         ▼
+┌────────────────────────────────────────┐
+│  Step 4: Version Diff                  │
+│  ──────────────────────────────────── │
+│  • Compare file lists vs prev version  │
+│  • Flag new .pth files as CRITICAL     │
+└────────┬───────────────────────────────┘
+         ▼
+┌────────────────────────────────────────┐
+│  Step 5: Safe Version Lookup           │
+│  ──────────────────────────────────── │
+│  • If HIGH_RISK/MALICIOUS: scan up     │
+│    to 3 prior versions for rollback    │
+└────────┬───────────────────────────────┘
+         ▼
+┌────────────────────────────────────────┐
+│  Risk Report                           │
+│  ──────────────────────────────────── │
+│  • Score 0-10                          │
+│  • Verdict: SAFE / LOW_RISK /          │
+│    HIGH_RISK / MALICIOUS               │
+│  • Safe version recommendation         │
+└────────────────────────────────────────┘
 ```
 
 ---
@@ -187,25 +97,99 @@ SEVERITY_WEIGHTS = {
     "HIGH":     2.5,
     "MEDIUM":   1.0,
     "LOW":      0.3,
+    "INFO":     0.0,
 }
 
-def calculate_score(findings: list[Finding]) -> float:
-    raw = sum(SEVERITY_WEIGHTS[f.severity] for f in findings)
-    return min(10.0, raw)
+# Score thresholds:
+# 0.0 - 2.0  → SAFE
+# 2.0 - 4.0  → LOW_RISK
+# 4.0 - 7.0  → HIGH_RISK
+# 7.0+       → MALICIOUS
 
-# Score interpretation:
-# 0.0 - 2.0  → SAFE (green)
-# 2.1 - 4.0  → LOW RISK (yellow)
-# 4.1 - 7.0  → HIGH RISK (orange)  → Warn + ask
-# 7.1 - 10.0 → MALICIOUS (red)     → Block by default
+# Severity floor overrides (prevents score gaming):
+# 1× CRITICAL  → minimum HIGH_RISK
+# 2+ CRITICAL  → minimum MALICIOUS
+# 3+ HIGH      → minimum HIGH_RISK
+
+# LOW findings capped at 8 contributors to prevent noise inflation
 ```
 
 ---
 
-## Future Roadmap (post-MVP)
+## .pth Semantic Classifier
 
-- **v0.2:** CI/CD workflow scanner (GitHub Actions, GitLab CI)
-- **v0.3:** AI API Key leak detection
-- **v0.4:** AI-generated code security audit (Copilot/Cursor patterns)
-- **v1.0:** VS Code / Cursor plugin
-- **Enterprise:** Private deployment, SBOM generation, compliance reports
+The core differentiator. A `.pth` file in `site-packages` runs on **every
+Python startup** — not just at install time. Other scanners miss this entirely.
+
+| .pth content | Classification | Finding |
+|---|---|---|
+| Empty | Normal | silent |
+| `/usr/local/lib/...` | Path-only | silent |
+| setuptools distutils shim | Safe code | LOW |
+| `subprocess.Popen(['curl', ...])` | **Dangerous** | CRITICAL |
+
+---
+
+## Project Structure
+
+```
+chaincanary/
+├── chaincanary/
+│   ├── __init__.py              # Version metadata
+│   ├── engine.py                # Pipeline orchestrator
+│   ├── models.py                # Finding, RiskReport, Severity, scoring
+│   ├── analyzer/
+│   │   ├── __init__.py          # Exports StaticAnalyzer, DynamicAnalyzer
+│   │   ├── static.py            # Static analysis coordinator
+│   │   ├── ast_deep.py          # AST obfuscation detection
+│   │   ├── pth_analyzer.py      # .pth semantic classifier
+│   │   ├── differ.py            # Version file-list diff
+│   │   ├── dynamic.py           # Docker sandbox (optional, v0.3)
+│   │   ├── rules.py             # Rule definitions (static + dynamic + attestation)
+│   │   ├── _file_checks.py      # Structure checks, .pth detection
+│   │   ├── _wheel_safety.py     # Zip bomb / path traversal
+│   │   ├── _hash_check.py       # Malicious hash lookup
+│   │   ├── _patterns.py         # Regex patterns (network, DNS, obfuscation)
+│   │   ├── _deep_visitor.py     # AST visitor for code inspection
+│   │   └── _sdist.py            # Source distribution fallback
+│   ├── cli/
+│   │   ├── __init__.py          # Re-exports + backward compat
+│   │   ├── _main.py             # Click group definition
+│   │   ├── _helpers.py          # Shared CLI utilities
+│   │   ├── check_cmd.py         # `check` subcommand
+│   │   ├── audit_cmd.py         # `audit` subcommand
+│   │   ├── diff_cmd.py          # `diff` subcommand
+│   │   ├── install_cmd.py       # `install` subcommand
+│   │   └── update_cmd.py        # `update` subcommand
+│   ├── db/
+│   │   └── known_malicious.json # SHA256 hash database
+│   ├── attestation.py           # PEP 740 attestation via PyPI Integrity API
+│   ├── downloader.py            # PyPI wheel download + version resolution
+│   ├── hashfeed.py              # Remote hash feed (cache: ~/.chaincanary)
+│   ├── lockfile.py              # Parse requirements.txt / pyproject.toml / Pipfile.lock
+│   ├── reporter.py              # Rich terminal output
+│   ├── safety_checks.py         # Typosquatting, dependency confusion, git deps
+│   ├── sarif.py                 # SARIF v2.1.0 output
+│   └── pre_commit.py            # Git pre-commit hook entry point
+├── tests/
+│   ├── fixtures/                # Mock wheel builders + malicious packages
+│   └── test_*.py                # 17 test modules, 375+ tests
+├── .github/workflows/
+│   ├── ci.yml                   # CI: Python 3.9-3.12 matrix
+│   └── release.yml              # PyPI trusted publishing (OIDC)
+├── pyproject.toml               # hatchling build, deps, tool config
+└── LICENSE                      # Apache 2.0
+```
+
+---
+
+## Tech Stack
+
+| Component | Choice | Reason |
+|-----------|--------|--------|
+| CLI framework | `click` + `rich` | Beautiful output, industry standard |
+| Package parsing | `zipfile` (stdlib) | No extra deps for wheel inspection |
+| Hash DB | Local JSON + GitHub-hosted remote feed | Simple, updatable via `chaincanary update` |
+| Build backend | `hatchling` | Modern, fast Python packaging |
+| Attestation | PyPI Integrity API (PEP 740 / Sigstore) | Standard, no extra infra |
+| Output formats | Rich terminal, JSON, SARIF v2.1.0 | Human + CI + GitHub Security tab |

@@ -133,7 +133,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - `socket.dev` added to table
 - Added clarifying note: use chaincanary *alongside* pip-audit/Safety, not instead of
 
-**Workers rate-limit cap** (`chaincanary/cli.py`)
+**Workers rate-limit cap** (`chaincanary/cli/audit_cmd.py`)
 - `--workers` capped at 16 internally to avoid PyPI 429 rate-limiting
 - Warning printed when user requests more than 16
 
@@ -251,6 +251,8 @@ exactly this.
 | KNOWN_MALICIOUS_HASH | CRITICAL | SHA256 hash database match |
 | WHEEL_PATH_TRAVERSAL | CRITICAL | directory escape in wheel |
 | WHEEL_ZIP_BOMB | HIGH | excessive file count |
+
+---
 
 ## [0.1.5] - 2026-03-26
 

@@ -56,7 +56,7 @@ chaincanary audit /tmp/runtime_deps.txt --fail-on MALICIOUS
 - **Immutable reports**: `RiskReport` dataclass accumulates findings; `calculate_score()` recomputes verdict from scratch each time.
 - **No mutation of downloaded packages**: everything happens in `tempfile.TemporaryDirectory`, wheel is never installed.
 
-### CLI Commands (Click-based, entry point: `cli.py`)
+### CLI Commands (Click-based, entry point: `cli/_main.py`)
 
 | Command | Purpose |
 |---------|---------|
@@ -64,29 +64,38 @@ chaincanary audit /tmp/runtime_deps.txt --fail-on MALICIOUS
 | `install` | Scan then pip-install if safe |
 | `audit` | Scan all deps in a lockfile (parallel via ThreadPoolExecutor) |
 | `diff` | Compare two versions for file-level changes |
+| `update` | Refresh hash database from remote feed |
 
 ### File Roles
 
 | File | Role |
 |------|------|
 | `engine.py` | Orchestrator — wires analyzers together |
-| `analyzer/static.py` | Core static analysis + `.pth` classifier (~800 lines, largest file) |
-| `analyzer/dynamic.py` | Docker sandbox analysis (optional) |
-| `analyzer/rules.py` | Rule definitions for static patterns |
+| `analyzer/static.py` | Core static analysis + `.pth` classifier |
+| `analyzer/ast_deep.py` | AST obfuscation detection |
 | `analyzer/pth_analyzer.py` | Deep `.pth` file classification |
 | `analyzer/differ.py` | File-list diff between versions |
+| `analyzer/dynamic.py` | Docker sandbox analysis (optional) |
+| `analyzer/rules.py` | Rule definitions (static, dynamic, attestation) |
+| `analyzer/_file_checks.py` | Structure checks, .pth detection |
+| `analyzer/_wheel_safety.py` | Zip bomb / path traversal protection |
+| `analyzer/_hash_check.py` | Known malicious hash lookup |
+| `analyzer/_patterns.py` | Regex patterns (network, DNS exfil, obfuscation) |
+| `analyzer/_deep_visitor.py` | AST visitor for code inspection |
 | `models.py` | `Finding`, `RiskReport`, `Severity`, scoring logic |
-| `safety_checks.py` | Typosquatting detection, git dep flagging |
+| `safety_checks.py` | Typosquatting, dependency confusion, git dep flagging |
 | `attestation.py` | PEP 740 attestation verification via PyPI Integrity API |
 | `downloader.py` | PyPI wheel download, version resolution |
-| `lockfile.py` | Parse requirements.txt / pyproject.toml |
+| `hashfeed.py` | Remote hash feed management (cache: `~/.chaincanary`) |
+| `lockfile.py` | Parse requirements.txt / pyproject.toml / Pipfile.lock |
 | `reporter.py` | Rich terminal output formatting |
 | `sarif.py` | SARIF v2.1.0 output generation |
+| `pre_commit.py` | Git pre-commit hook entry point |
 | `db/known_malicious.json` | SHA256 hash database of known malware |
 
 ## Testing
 
-- Test files: `tests/test_static.py`, `tests/test_integration.py`, `tests/test_pth_and_edge_cases.py`, `tests/test_review_fixes.py`, `tests/test_sarif.py`, `tests/test_sarif_edge_cases.py`, `tests/test_offline.py`, `tests/test_offline_edge_cases.py`, `tests/test_attestation.py`
+- Test files: `tests/test_static.py`, `tests/test_integration.py`, `tests/test_pth_and_edge_cases.py`, `tests/test_review_fixes.py`, `tests/test_sarif.py`, `tests/test_sarif_edge_cases.py`, `tests/test_offline.py`, `tests/test_offline_edge_cases.py`, `tests/test_attestation.py`, `tests/test_ast_deep.py`, `tests/test_dep_confusion.py`, `tests/test_hash_db.py`, `tests/test_hashfeed.py`, `tests/test_pre_commit.py`, `tests/test_skip.py`, `tests/test_timeout.py`
 - 375 tests total, all passing
 - Fixtures in `tests/fixtures/` include a mock malicious LiteLLM wheel
 - CI matrix: Python 3.9, 3.10, 3.11, 3.12
@@ -101,10 +110,6 @@ chaincanary audit /tmp/runtime_deps.txt --fail-on MALICIOUS
 - JSON output mode (`--json-output`) on every command for CI/pipeline use
 - Workers capped at 16 for PyPI rate-limit protection
 
-## Roadmap Context (v0.2 planned)
+## Roadmap Context
 
-Key planned features: remote hash feed, ~~SARIF output~~, ~~`--offline` mode~~, `--timeout` flag, `--skip` patterns, pre-commit hook, Rich progress bar for audit, dependency confusion detection, `__init__.py` AST deep scan. See `ROADMAP.md` for full details.
-
-### Implemented in v0.2 (dev)
-- **SARIF output** (`--sarif-output`): Generates SARIF v2.1.0 JSON for GitHub Code Scanning. Uses Package URL (purl) for artifact URIs, SHA-256 fingerprints for dedup. Module: `sarif.py`.
-- **Offline mode** (`--offline`): Disables all network calls. `check --offline` requires `--local`. `audit --offline` requires `--wheel-dir`. Engine skips version diff and safe version lookup.
+v0.2 shipped. See `ROADMAP.md` for v0.3 plans (lightweight sandbox, package reputation, npm/cargo/go support).

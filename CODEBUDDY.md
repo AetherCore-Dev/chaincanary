@@ -95,7 +95,7 @@ chaincanary/
 │   │   ├── ast_deep.py          # AST obfuscation detection (string concat, chr(), encoded exec)
 │   │   ├── differ.py            # File-list diff between versions
 │   │   ├── pth_analyzer.py      # Deep .pth file semantic classification
-│   │   ├── rules.py             # Rule definitions (STATIC_RULES, DYNAMIC_RULES)
+│   │   ├── rules.py             # Rule definitions (STATIC_RULES, DYNAMIC_RULES, ATTESTATION_RULES)
 │   │   ├── _file_checks.py      # Structure checks, .pth detection, Python file AST scanning
 │   │   ├── _wheel_safety.py     # Zip bomb detection, path traversal protection
 │   │   ├── _hash_check.py       # Known malicious hash lookup from local db

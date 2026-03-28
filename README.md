@@ -30,6 +30,7 @@ chaincanary check litellm==1.82.8 --local tests/fixtures/litellm-1.82.8-py3-none
 - **CI-ready** — GitHub Action blocks malicious packages on every push
 - **Audit entire projects** — scan all dependencies in `requirements.txt` or `pyproject.toml` in one command
 - **Version diffing** — see exactly what changed between releases
+- **Attestation verification** — checks PyPI digital signatures (PEP 740 / Sigstore)
 - **Works in China** — no proxy needed, unlike socket.dev / Safety
 
 [![PyPI version](https://badge.fury.io/py/chaincanary.svg)](https://pypi.org/project/chaincanary/)
@@ -182,6 +183,8 @@ chaincanary has a **semantic `.pth` classifier** with 4 categories:
 | Path traversal in wheel zip | `.whl` structure | CRITICAL |
 | Known malicious SHA256 hash | `.whl` file | CRITICAL |
 | Typosquatting (Levenshtein distance) | package name | MEDIUM |
+| Dependency confusion | package name | HIGH |
+| PyPI attestation missing (PEP 740) | package metadata | INFO |
 
 ---
 
