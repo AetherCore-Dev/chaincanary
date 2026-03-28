@@ -53,8 +53,8 @@ Fixes identified during multi-angle security review:
 - [x] **SARIF output** — `--sarif-output` for GitHub Security tab integration
 
 ### Still planned (backlog)
-- [ ] **Wheel signing check** — flag unsigned packages (Sigstore/PEP 740)
-- [ ] **Pre-commit hook** — `chaincanary-pre-commit` repo
+- [x] **PEP 740 attestation verification** — query PyPI Integrity API for Sigstore attestations (`attestation.py`)
+- [x] **Pre-commit hook** — `chaincanary-pre-commit` entry point + `.pre-commit-hooks.yaml`
 - [ ] **Docker image** — `ghcr.io/allenenli/chaincanary:latest`
 
 ---
@@ -95,19 +95,19 @@ Be aware of them when interpreting results.
 
 | Limitation | Impact | Mitigation |
 |------------|--------|------------|
-| **C extensions (`.so`/`.pyd`)** | Malicious native code is invisible to static analysis | Use `--sandbox` in v0.2 |
-| **Obfuscation not yet AST-parsed** | Regex misses `"ge"+"tattr"` style tricks | AST deep scan in v0.2 |
+| **C extensions (`.so`/`.pyd`)** | Malicious native code is invisible to static analysis | Lightweight sandbox in v0.3 |
+| **Advanced obfuscation** | AST deep scan covers many patterns but not all (e.g., nested lambda chains) | Ongoing improvement |
 | **No CVE database** | Won't catch vulnerabilities in known-safe packages | Use alongside `pip-audit` |
 | **No dynamic sandbox** | `import pkg` side effects not executed | Lightweight sandbox in v0.3 |
-| **Git deps not fully analyzed** | Flagged as HIGH_RISK but not deep-scanned | Planned for v0.2 |
-| **Private PyPI mirrors** | Can't download from non-public registries | `--offline` flag in v0.2 |
+| **Git deps not fully analyzed** | Flagged as HIGH_RISK but not deep-scanned | Planned |
+| **Private PyPI mirrors** | Can't download from non-public registries | Use `--offline --wheel-dir` |
 | **Multi-stage payloads** | Pkg downloads payload at runtime, nothing suspicious at install | Runtime monitoring (v0.3+) |
 
 ### False positives (things we over-flag)
 
 | Limitation | Impact | Mitigation |
 |------------|--------|------------|
-| **Legitimate network in `__init__`** | Analytics/telemetry packages flagged MEDIUM | `--skip` in v0.2 |
+| **Legitimate network in `__init__`** | Analytics/telemetry packages flagged MEDIUM | Use `--skip` flag |
 | **`sys.modules` in testing code** | Test utilities sometimes use indirect imports | Scope detection to non-test files |
 | **socket in server libraries** | HTTP servers legitimately use socket | DNS_EXFIL only fires in `__init__` |
 | **Typosquatting on short names** | Short package names have high similarity by chance | Tuned thresholds (≤2 edit dist + ≥0.75 similarity) |
@@ -116,7 +116,7 @@ Be aware of them when interpreting results.
 
 | Constraint | Why | Future fix |
 |------------|-----|------------|
-| **Hash DB is static** | Hardcoded in source, stale after release | Remote hash feed (v0.2) |
+| **Hash DB is static** | Bundled DB stale after release | Use `chaincanary update` to refresh from remote feed |
 | **No code signing** | DB updates not authenticated | Sigstore-signed feed (v0.2) |
 | **Single-pass analysis** | No cross-file call graph | AST call graph (v0.3) |
 | **No Windows installer hooks** | `.exe` post-install scripts not analyzed | Planned |

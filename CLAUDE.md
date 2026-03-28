@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 chaincanary is a Python supply-chain attack scanner that detects malicious packages *before* installation. It performs pure offline static analysis on `.whl` files — no Docker, no sandbox, no cloud. Born from the LiteLLM 1.82.7/.8 attack (March 2026).
 
-Current version: **0.2.0** (v0.2 shipped — SARIF, offline mode, AST deep scan, hash feed, dep confusion detection).
+Current version: **0.2.0** (v0.2 shipped — SARIF, offline mode, AST deep scan, hash feed, dep confusion detection, PEP 740 attestation verification).
 
 ## Build & Development Commands
 
@@ -39,14 +39,15 @@ chaincanary audit /tmp/runtime_deps.txt --fail-on MALICIOUS
 
 ### Analysis Pipeline
 
-`AnalysisEngine.analyze()` in `engine.py` orchestrates five sequential steps:
+`AnalysisEngine.analyze()` in `engine.py` orchestrates sequential steps:
 
 1. **Typosquatting check** (`safety_checks.py`) — Levenshtein distance against top-200 PyPI packages, no download needed
 2. **Download** (`downloader.py`) — fetches `.whl` from PyPI into a temp dir (or uses `--local`)
-3. **Static analysis** (`analyzer/static.py`) — the core: zip safety, `.pth` semantic classifier, AST analysis, obfuscation detection, hash DB lookup, DNS exfiltration patterns
-4. **Version diff** (`analyzer/differ.py`) — compares file lists between current and previous version; flags new `.pth` files as CRITICAL
-5. **Dynamic analysis** (`analyzer/dynamic.py`) — Docker-based sandbox (optional, skipped by default in practice)
-6. **Safe version lookup** — if HIGH_RISK/MALICIOUS, scans up to 3 prior versions to find a clean rollback candidate
+3. **Attestation check** (`attestation.py`) — queries PyPI Integrity API (PEP 740) for Sigstore attestations; INFO-only, no score impact
+4. **Static analysis** (`analyzer/static.py`) — the core: zip safety, `.pth` semantic classifier, AST analysis, obfuscation detection, hash DB lookup, DNS exfiltration patterns
+5. **Version diff** (`analyzer/differ.py`) — compares file lists between current and previous version; flags new `.pth` files as CRITICAL
+6. **Dynamic analysis** (`analyzer/dynamic.py`) — Docker-based sandbox (optional, skipped by default in practice)
+7. **Safe version lookup** — if HIGH_RISK/MALICIOUS, scans up to 3 prior versions to find a clean rollback candidate
 
 ### Key Design Decisions
 
@@ -76,6 +77,7 @@ chaincanary audit /tmp/runtime_deps.txt --fail-on MALICIOUS
 | `analyzer/differ.py` | File-list diff between versions |
 | `models.py` | `Finding`, `RiskReport`, `Severity`, scoring logic |
 | `safety_checks.py` | Typosquatting detection, git dep flagging |
+| `attestation.py` | PEP 740 attestation verification via PyPI Integrity API |
 | `downloader.py` | PyPI wheel download, version resolution |
 | `lockfile.py` | Parse requirements.txt / pyproject.toml |
 | `reporter.py` | Rich terminal output formatting |
@@ -84,8 +86,8 @@ chaincanary audit /tmp/runtime_deps.txt --fail-on MALICIOUS
 
 ## Testing
 
-- Test files: `tests/test_static.py`, `tests/test_integration.py`, `tests/test_pth_and_edge_cases.py`, `tests/test_review_fixes.py`, `tests/test_sarif.py`, `tests/test_sarif_edge_cases.py`, `tests/test_offline.py`, `tests/test_offline_edge_cases.py`
-- 212 tests total, all passing
+- Test files: `tests/test_static.py`, `tests/test_integration.py`, `tests/test_pth_and_edge_cases.py`, `tests/test_review_fixes.py`, `tests/test_sarif.py`, `tests/test_sarif_edge_cases.py`, `tests/test_offline.py`, `tests/test_offline_edge_cases.py`, `tests/test_attestation.py`
+- 375 tests total, all passing
 - Fixtures in `tests/fixtures/` include a mock malicious LiteLLM wheel
 - CI matrix: Python 3.9, 3.10, 3.11, 3.12
 - Lint runs only on 3.11 in CI

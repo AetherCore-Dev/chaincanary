@@ -46,6 +46,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - String concatenation in getattr/import calls
 - Deep analysis of `__init__.py` for hidden malicious patterns
 
+**PEP 740 attestation verification** (`chaincanary/attestation.py` — new module)
+- Queries PyPI Integrity API for Sigstore digital attestations
+- Extracts publisher kind, repository, workflow ref from attestation metadata
+- `--check-attestation/--no-check-attestation` flag on `check`, `audit`, and `install`
+- INFO-only findings (no score impact): `ATTESTATION_VERIFIED` / `NO_ATTESTATION`
+- Attestation badge displayed in verdict panel (signed vs unsigned)
+- Input validation for package names, versions, filenames
+- Response cap (1 MB) to prevent memory exhaustion
+- Automatically disabled in offline mode
+
 **CLI enhancements**
 - `--timeout` flag — per-package download timeout (default 30s)
 - `--skip` patterns — ignore known-safe packages (e.g., `--skip torch,tensorflow`)
@@ -67,7 +77,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Tests
 
-- 306 tests total (was 69 in v0.1.5) — all passing
+- 375 tests total (was 69 in v0.1.5) — all passing
 - `tests/test_sarif.py`: 78 tests covering SARIF schema compliance
 - `tests/test_sarif_edge_cases.py`: 47 edge-case tests
 - `tests/test_offline_edge_cases.py`: 18 offline mode edge-case tests
@@ -75,6 +85,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - `tests/test_dep_confusion.py`: dependency confusion tests
 - `tests/test_hashfeed.py`: remote hash feed tests
 - `tests/test_timeout.py`, `tests/test_skip.py`: new flag tests
+- `tests/test_attestation.py`: PEP 740 attestation verification tests
 
 ---
 
