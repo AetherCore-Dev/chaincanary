@@ -33,7 +33,7 @@ class Finding:
     title: str
     description: str
     evidence: str = ""
-    source: str = "static"  # "static" | "dynamic"
+    source: str = "static"  # "static" | "dynamic" | "attestation"
 
 
 @dataclass

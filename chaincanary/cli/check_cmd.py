@@ -45,6 +45,11 @@ from chaincanary.cli._main import main
         "dependency confusion detection."
     ),
 )
+@click.option(
+    "--check-attestation/--no-check-attestation",
+    default=True, show_default=True,
+    help="Check PyPI attestations (PEP 740). Disabled in offline mode.",
+)
 def check(
     package_spec: str,
     skip_dynamic: bool,
@@ -55,6 +60,7 @@ def check(
     offline: bool,
     timeout: int,
     internal_names: str,
+    check_attestation: bool,
 ):
     """
     Check a package for security issues WITHOUT installing it.
@@ -97,6 +103,7 @@ def check(
         offline=offline,
         timeout=timeout,
         internal_names_set=int_names or None,
+        check_attestation=check_attestation,
     )
 
     if sarif_output:

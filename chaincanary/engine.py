@@ -12,6 +12,7 @@ from rich.console import Console
 from chaincanary.analyzer.differ import diff_from_static
 from chaincanary.analyzer.dynamic import DynamicAnalyzer
 from chaincanary.analyzer.static import StaticAnalyzer
+from chaincanary.attestation import attestation_to_findings, check_attestation
 from chaincanary.downloader import (
     DEFAULT_TIMEOUT,
     download_wheel,
@@ -34,12 +35,14 @@ class AnalysisEngine:
         offline: bool = False,
         timeout: int = DEFAULT_TIMEOUT,
         internal_names: set[str] | None = None,
+        check_attestation_flag: bool = True,
     ):
         self.skip_dynamic = skip_dynamic
         self.verbose = verbose
         self.offline = offline
         self.timeout = timeout
         self.internal_names: set[str] = internal_names or set()
+        self.check_attestation_flag = check_attestation_flag
         self.static = StaticAnalyzer()
         self.dynamic = DynamicAnalyzer()
 
@@ -151,6 +154,21 @@ class AnalysisEngine:
                 )
                 report.calculate_score()
                 return report
+
+            # ── Step 1.5: Attestation check (PEP 740) ─────────────────
+            if (
+                self.check_attestation_flag
+                and not self.offline
+                and not local_wheel
+            ):
+                progress("Checking PyPI attestations...")
+                att_result = check_attestation(
+                    package, version, wheel_path.name,
+                    timeout=self.timeout,
+                )
+                report.findings.extend(
+                    attestation_to_findings(att_result, package, version),
+                )
 
             # ── Step 2: Static Analysis ──────────────────────────────
             progress("Running static analysis...")

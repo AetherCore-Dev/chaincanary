@@ -61,6 +61,11 @@ from chaincanary.engine import AnalysisEngine
         "dependency confusion detection."
     ),
 )
+@click.option(
+    "--check-attestation/--no-check-attestation",
+    default=True, show_default=True,
+    help="Check PyPI attestations (PEP 740). Disabled in offline mode.",
+)
 def audit(
     lockfile: str,
     skip_dynamic: bool,
@@ -73,6 +78,7 @@ def audit(
     timeout: int,
     skip_packages: str,
     internal_names: str,
+    check_attestation: bool,
 ):
     """
     Audit all packages in a lockfile / requirements file.
@@ -183,6 +189,7 @@ def audit(
     engine = AnalysisEngine(
         skip_dynamic=skip_dynamic, offline=offline,
         timeout=timeout, internal_names=int_names_set,
+        check_attestation_flag=check_attestation,
     )
 
     def scan_one(spec):

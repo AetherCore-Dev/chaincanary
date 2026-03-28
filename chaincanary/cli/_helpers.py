@@ -63,6 +63,7 @@ def _run_analysis(
     offline: bool = False,
     timeout: int = 30,
     internal_names_set: set[str] | None = None,
+    check_attestation: bool = True,
 ):
     """Run full analysis with live progress display."""
     if not quiet:
@@ -72,6 +73,7 @@ def _run_analysis(
         skip_dynamic=skip_dynamic, verbose=verbose,
         offline=offline, timeout=timeout,
         internal_names=internal_names_set,
+        check_attestation_flag=check_attestation,
     )
     local_path = Path(local_wheel) if local_wheel else None
 

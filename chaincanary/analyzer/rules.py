@@ -152,4 +152,32 @@ DYNAMIC_RULES = {
     ),
 }
 
-ALL_RULES = {**STATIC_RULES, **DYNAMIC_RULES}
+# ─────────────────────────────────────────────
+# Attestation Rules (PEP 740 / PyPI Integrity)
+# ─────────────────────────────────────────────
+ATTESTATION_RULES = {
+    "ATTESTATION_VERIFIED": Rule(
+        rule_id="ATTESTATION_VERIFIED",
+        severity=Severity.INFO,
+        title="Package has valid PyPI attestation (PEP 740 / Sigstore)",
+        description=(
+            "The package has a digital attestation on PyPI, meaning it was "
+            "built in a verified CI environment (e.g., GitHub Actions, GitLab CI). "
+            "This is a positive supply-chain integrity signal."
+        ),
+        source="attestation",
+    ),
+    "NO_ATTESTATION": Rule(
+        rule_id="NO_ATTESTATION",
+        severity=Severity.INFO,
+        title="No PyPI attestation found",
+        description=(
+            "The package does not have a digital attestation on PyPI. "
+            "Most packages currently lack attestations (~17% adoption). "
+            "This is informational, not a risk signal."
+        ),
+        source="attestation",
+    ),
+}
+
+ALL_RULES = {**STATIC_RULES, **DYNAMIC_RULES, **ATTESTATION_RULES}

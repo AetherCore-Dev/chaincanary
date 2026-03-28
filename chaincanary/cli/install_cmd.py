@@ -35,6 +35,11 @@ from chaincanary.cli._main import main
     default=30, show_default=True,
     help="Per-request timeout in seconds (1\u2013300).",
 )
+@click.option(
+    "--check-attestation/--no-check-attestation",
+    default=True, show_default=True,
+    help="Check PyPI attestations (PEP 740).",
+)
 def install(
     package_spec: str,
     skip_dynamic: bool,
@@ -43,6 +48,7 @@ def install(
     block_on: str,
     json_output: bool,
     timeout: int,
+    check_attestation: bool,
 ):
     """
     Analyze a package and install it if safe.
@@ -59,6 +65,7 @@ def install(
     report = _run_analysis(
         package, version, skip_dynamic=skip_dynamic,
         verbose=verbose, timeout=timeout,
+        check_attestation=check_attestation,
     )
 
     if json_output:

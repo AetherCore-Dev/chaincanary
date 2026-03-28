@@ -113,6 +113,16 @@ def _print_verdict_panel(report: RiskReport) -> None:
         if medium:
             lines.append(f"  [yellow]● {len(medium)} MEDIUM finding(s)[/yellow]")
 
+    # Attestation badge (PEP 740)
+    att_finding = next(
+        (f for f in report.findings if f.source == "attestation"), None,
+    )
+    if att_finding:
+        if att_finding.rule_id == "ATTESTATION_VERIFIED":
+            lines.append(f"  [green]\U0001f50f Signed:[/green] {att_finding.title}")
+        elif att_finding.rule_id == "NO_ATTESTATION":
+            lines.append("  [dim]\U0001f513 No attestation[/dim]")
+
     if report.safe_version and report.verdict in ("HIGH_RISK", "MALICIOUS"):
         lines.append("")
         lines.append(
