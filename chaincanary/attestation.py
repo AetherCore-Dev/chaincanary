@@ -104,16 +104,16 @@ def check_attestation(
 
     # Read body with size cap to prevent memory exhaustion
     try:
-        content = b""
+        content = bytearray()
         for chunk in resp.iter_content(chunk_size=8192):
-            content += chunk
+            content.extend(chunk)
             if len(content) > _MAX_RESPONSE_BYTES:
                 resp.close()
                 return AttestationResult(
                     has_attestation=False, error="Response too large",
                 )
         resp.close()
-        data = json.loads(content)
+        data = json.loads(bytes(content))
     except (json.JSONDecodeError, ValueError):
         return AttestationResult(
             has_attestation=False, error="Invalid JSON response",

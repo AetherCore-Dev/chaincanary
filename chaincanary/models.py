@@ -100,8 +100,8 @@ class RiskReport:
 
     @property
     def is_blocked(self) -> bool:
-        return self.score > 7.0
+        return self.verdict == "MALICIOUS"
 
     @property
     def should_warn(self) -> bool:
-        return 2.0 < self.score <= 7.0
+        return self.verdict in ("LOW_RISK", "HIGH_RISK")
